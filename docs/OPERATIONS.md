@@ -139,6 +139,8 @@ Investigate rising 5xx by request ID and dependency health. Inspect 429 Retry-Af
 
 ## 7. Deployment, availability and scaling
 
+For the Vercel static frontend with FastAPI, MySQL, Ollama and Docker retained on the Windows PC, follow [Vercel + PC backend](VERCEL_PC_BACKEND.md). It includes the Tailscale Funnel setup, same-origin API proxy, short-lived peer WebSocket tickets, public deployment `.env` values and remote verification commands. The PC must remain awake and connected; this is not always-on hosting.
+
 The provided Dockerfile uses a non-root app user and a readiness healthcheck. Compose persists MySQL/Ollama through volumes and restarts them unless stopped. `deploy/interviewace.service` supplies a Linux restart-on-failure example; `deploy/nginx.conf` supplies an HTTPS/WebSocket reverse-proxy template. Replace paths, domain, certificates, service user and configuration before installation. These files are reviewable examples; no public site or OS service was automatically deployed.
 
 Set a real `PUBLIC_ORIGIN`, narrow `TRUSTED_HOSTS`, `COOKIE_SECURE=true`, and protect the private environment and data directories. Trust forwarded headers only from your proxy. Keep MySQL, Ollama and Docker off public interfaces. The Docker application image does not contain speech dependencies by default; install the optional speech requirements in a derived image if speech is required.

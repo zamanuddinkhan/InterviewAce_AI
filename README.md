@@ -47,6 +47,7 @@ Health: `/api/live` checks the process; `/api/health` verifies MySQL connectivit
 | [Validation record](docs/validation.md) | Actual test results, live checks, fixes, cleanup and remaining verification limits |
 | [PC MySQL connection](docs/MYSQL.md) | Exact local connection details and MySQL Workbench instructions, without exposing passwords |
 | [Website dry run](docs/DRY_RUN.md) | Current browser/API results, which mode to choose, editor roles and device permission troubleshooting |
+| [Vercel + PC backend](docs/VERCEL_PC_BACKEND.md) | Static Vercel frontend, Tailscale Funnel, private PC configuration, generated routes and live deployment checks |
 
 ## Verification commands
 
@@ -77,4 +78,4 @@ See [Operations guide](docs/OPERATIONS.md). Install Python 3.11/3.12, MySQL Comm
 
 ## Deployment scope
 
-The current build is a verified **single-process local application**, with durable MySQL storage and recoverable backups. Redundant hosting, database replication/failover, external uptime monitoring and a reviewed public code runner are still infrastructure tasks; this repository does not claim an HA service or a public security certification. HTTPS reverse-proxy and restart-service templates are provided under `deploy/`.
+The current build is a verified **single-process local application**, with durable MySQL storage and recoverable backups. A Vercel static frontend with the FastAPI backend, database, Ollama and Docker kept on a PC can be configured with [the deployment guide](docs/VERCEL_PC_BACKEND.md). This requires the PC to stay online and exposes the app through a public HTTPS tunnel. Redundant hosting, database replication/failover, external uptime monitoring and a reviewed public code runner are still infrastructure tasks; this repository does not claim an HA service or a public security certification. HTTPS reverse-proxy and restart-service templates are provided under `deploy/`.

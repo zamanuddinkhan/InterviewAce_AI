@@ -1,5 +1,9 @@
 # Validation record — 24 October 2026
 
+## Vercel + PC backend preparation
+
+Added generated Vercel routing/security configuration, a private .env helper, direct secure WebSocket setup with one-use room tickets, and static asset routing. The disposable SQLite suite passed 78 tests, including ticket issuance, room scoping, socket authentication and replay rejection. Frontend JavaScript syntax and Python compilation passed. Both PowerShell helpers passed isolated checks using sample hostnames and a temporary environment file; the real .env was not modified. Vercel, Tailscale Funnel, live PC services and remote devices still require the deployment checks in VERCEL_PC_BACKEND.md.
+
 ## Latest end-to-end verification — backend 3.3.0
 
 The current source was rechecked against the configured live services on 24 October 2026. The existing automated, browser and runtime checks passed:

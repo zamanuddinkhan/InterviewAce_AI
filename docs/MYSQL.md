@@ -2,6 +2,16 @@
 
 The project now uses your **existing MySQL Community Server on this PC at port 3306**, with the connection in `.env`.
 
+For a public Vercel + PC-backend deployment, the current local root account is not appropriate for the public-facing application. In Workbench, create a separate TCP user for `127.0.0.1` and grant only the schema-level permissions the app needs:
+
+```sql
+CREATE USER 'interviewace_app'@'127.0.0.1' IDENTIFIED BY 'REPLACE_WITH_A_LONG_RANDOM_PASSWORD';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES
+ON interviewace.* TO 'interviewace_app'@'127.0.0.1';
+```
+
+Then update only `DATABASE_URL` in the private `.env` to `mysql+pymysql://interviewace_app:URL_ENCODED_PASSWORD@127.0.0.1:3306/interviewace`. URL-encode reserved password characters. Take a verified backup first and test the app with the new user before enabling the tunnel. Keep MySQL listening on localhost; Vercel accesses it only through the FastAPI application. The deployment user has schema migration rights but cannot create/drop other databases; the isolated MySQL verification suite still requires a separate test account with create/drop rights.
+
 | Setting | Configured value |
 | --- | --- |
 | Host | `127.0.0.1` |

@@ -43,6 +43,16 @@ Authentication required.
 
 Responses: 200, 422.
 
+## POST /api/rooms/{room_id}/ws-ticket
+
+Issue Ws Ticket
+
+Authentication required. The ticket is one-use, room-scoped and expires after 45 seconds. It is intended for a browser connecting directly to the PC backend's secure WebSocket after requesting the ticket through the same-origin API proxy.
+
+- `room_id` (path): `string`; required: True.
+
+Responses: 200, 422.
+
 ## DELETE /api/rooms/{room_id}
 
 Delete Room

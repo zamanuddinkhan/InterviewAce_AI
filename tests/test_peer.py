@@ -115,6 +115,37 @@ def test_websocket_chat_code_and_signaling():
     assert any(e['payload'].get('text') == 'Hello peer' for e in details['events'])
 
 
+def test_room_websocket_ticket_is_scoped_and_one_use():
+    room_id, interviewer, candidate = room_pair()
+    client.post(f'/api/rooms/{room_id}/start', headers=interviewer)
+    other_room = client.post('/api/rooms', headers=interviewer,
+                             json={'topic':'Another Python room','duration_seconds':60}).json()['id']
+    scoped_ticket = client.post(f'/api/rooms/{room_id}/ws-ticket', headers=candidate).json()['ticket']
+    with client.websocket_connect(f'/api/rooms/{other_room}/ws') as ws:
+        ws.send_json({'authenticate': True, 'ticket': scoped_ticket})
+        assert ws.receive_json()['type'] == 'error'
+    assert scoped_ticket not in peer.ws_tickets
+
+    ticket_response = client.post(f'/api/rooms/{room_id}/ws-ticket', headers=candidate)
+    assert ticket_response.status_code == 200, ticket_response.text
+    ticket = ticket_response.json()
+    assert ticket['expires_in'] == peer.WS_TICKET_SECONDS
+    assert ticket['ticket'] in peer.ws_tickets
+
+    with client.websocket_connect(f'/api/rooms/{room_id}/ws') as ws:
+        ws.send_json({'authenticate': True, 'ticket': ticket['ticket']})
+        assert ws.receive_json()['type'] == 'refresh'
+    assert ticket['ticket'] not in peer.ws_tickets
+
+    # The same ticket cannot authenticate a second socket.
+    from starlette.websockets import WebSocketDisconnect
+    with client.websocket_connect(f'/api/rooms/{room_id}/ws') as ws:
+        ws.send_json({'authenticate': True, 'ticket': ticket['ticket']})
+        assert ws.receive_json()['type'] == 'error'
+        with pytest.raises(WebSocketDisconnect):
+            ws.receive_json()
+
+
 def test_audio_requires_consent_and_metrics_are_explainable():
     room_id, interviewer, candidate = room_pair()
     client.post(f'/api/rooms/{room_id}/start', headers=interviewer)

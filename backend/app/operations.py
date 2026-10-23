@@ -90,7 +90,7 @@ def install(app):
             'X-Frame-Options': 'DENY',
             'Referrer-Policy': 'same-origin',
             'Permissions-Policy': 'camera=(self), microphone=(self), geolocation=()',
-            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' ws: wss:; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
             'Cache-Control': 'no-store' if request.url.path.startswith('/api') else ('no-cache' if request.url.path == '/' else 'public, max-age=300, must-revalidate'),
             'Server-Timing': f'app;dur={elapsed}',
         })

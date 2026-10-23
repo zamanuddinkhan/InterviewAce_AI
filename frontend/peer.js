@@ -1,7 +1,7 @@
 'use strict';
 window.Peer = (() => {
   let mounted = false, room = null, socket = null, stream = null, pc = null, recorder = null;
-  let reconnect = null, codeDebounce = null, candidates = [], recordingChunks = [], lastStatus = '', refreshing = false, refreshAgain = false;
+  let reconnect = null, codeDebounce = null, candidates = [], recordingChunks = [], lastStatus = '', refreshing = false, refreshAgain = false, connecting = false;
   let mounting = null, roomTab = 'live', devices = null, makingOffer = false, ignoreOffer = false;
   let remoteStream = null, previewUrl = null;
   const deletionTimers = new Map();
@@ -264,11 +264,24 @@ window.Peer = (() => {
     tab(roomTab);
   }
   function saveBlob(blob, filename) { const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-  function connect() {
+  async function connect() {
+    if (!room || connecting || socket?.readyState === WebSocket.CONNECTING || socket?.readyState === WebSocket.OPEN) return;
+    connecting = true;
     const id = room.id;
-    socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/rooms/${id}/ws`);
-    socket.onopen = () => {socket.send(JSON.stringify({authenticate:true}));controls();};
-    socket.onmessage = action(async event => {
+    try {
+      const auth = {authenticate:true};
+      const backendOrigin = window.INTERVIEWACE_BACKEND_WS_ORIGIN || '';
+      let address;
+      if (backendOrigin) {
+        const issued = await api(`/rooms/${id}/ws-ticket`, {method:'POST'});
+        auth.ticket = issued.ticket;
+        address = new URL(`/api/rooms/${id}/ws`, backendOrigin);
+      } else address = new URL(`/api/rooms/${id}/ws`, location.origin);
+      address.protocol = address.protocol === 'https:' ? 'wss:' : 'ws:';
+      if (room?.id !== id || !token) return;
+      const connection = socket = new WebSocket(address);
+      connection.onopen = () => { connecting = false; connection.send(JSON.stringify(auth)); controls(); };
+      connection.onmessage = action(async event => {
       const message = JSON.parse(event.data);
       if (message.type === 'refresh') await refresh();
       else if (message.type === 'timer') {
@@ -280,8 +293,19 @@ window.Peer = (() => {
       else if (['offer','answer','ice'].includes(message.type)) await signal(message);
       else if (message.type === 'error') toast(message.message, true);
       else if (message.type === 'deleted') { close(); await history(); }
-    });
-    socket.onclose = event => { if (event.code === 1008) toast('Session expired or room access changed. Please log in again.',true); else if (room?.id === id && token && event.code !== 4000) reconnect = setTimeout(connect, 2500); };
+      });
+      connection.onclose = event => {
+        connecting = false;
+        if (socket === connection) socket = null;
+        if (event.code === 1008) toast('Session expired or room access changed. Please log in again.',true);
+        else if (room?.id === id && token && event.code !== 4000) reconnect = setTimeout(connect, 2500);
+      };
+    } catch (error) {
+      if (room?.id === id && token) {
+        toast(error.message || 'Room connection could not start. Retrying shortly.', true);
+        reconnect = setTimeout(connect, 2500);
+      }
+    } finally { connecting = false; }
   }
   function deviceChanged(next) {
     stream=next;
@@ -376,7 +400,7 @@ window.Peer = (() => {
     el('remotePlaceholder')?.classList.remove('hidden');
   }
   function close() {
-    clearTimeout(reconnect); clearTimeout(codeDebounce); room = null;
+    clearTimeout(reconnect); clearTimeout(codeDebounce); room = null; connecting = false;
     if (socket) { socket.onclose = null; socket.close(); } socket = null; stopMedia();
     if (mounted) {
       el('peerRoom').classList.add('hidden');

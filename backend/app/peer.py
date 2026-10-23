@@ -7,6 +7,7 @@ import math
 import mimetypes
 import re
 import secrets
+import threading
 import time
 import xml.etree.ElementTree as ET
 import zipfile
@@ -14,7 +15,7 @@ from functools import lru_cache
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -32,6 +33,9 @@ from .security import current_user, user_from_token
 router = APIRouter(prefix='/api/rooms', tags=['Peer interviews'])
 connections: dict[str, dict[int, WebSocket]] = {}
 locks: dict[str, asyncio.Lock] = {}
+ws_tickets: dict[str, tuple[str, int, str, float]] = {}
+_ws_ticket_lock = threading.Lock()
+WS_TICKET_SECONDS = 45
 
 
 class CreateRoom(BaseModel):
@@ -553,6 +557,28 @@ async def delete_room(room_id: str, user: User = Depends(current_user), db: Sess
     return {'scheduled': True, 'undo_until': undo_until}
 
 
+@router.post('/{room_id}/ws-ticket')
+def issue_ws_ticket(room_id: str, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Issue a short-lived, one-use credential for the cross-origin room socket."""
+    access(db, room_id, user)
+    authorization = request.headers.get('authorization', '')
+    login_token = (authorization[7:].strip() if authorization.lower().startswith('bearer ')
+                   else request.cookies.get(SESSION_COOKIE, ''))
+    if not login_token:
+        raise HTTPException(401, 'Please log in again before connecting to this room.')
+
+    now = time.time()
+    ticket = secrets.token_urlsafe(32)
+    with _ws_ticket_lock:
+        for key, value in list(ws_tickets.items()):
+            if value[3] <= now:
+                ws_tickets.pop(key, None)
+        if len(ws_tickets) >= 4096:
+            raise HTTPException(503, 'Room connections are busy. Try again shortly.')
+        ws_tickets[ticket] = (room_id, user.id, login_token, now + WS_TICKET_SECONDS)
+    return {'ticket': ticket, 'expires_in': WS_TICKET_SECONDS}
+
+
 @router.websocket('/{room_id}/ws')
 async def live(ws: WebSocket, room_id: str):
     # Token in first frame avoids credentials in URL/access logs.
@@ -567,9 +593,21 @@ async def live(ws: WebSocket, room_id: str):
         auth = await asyncio.wait_for(ws.receive_json(), timeout=10)
         if not isinstance(auth, dict):
             raise ValueError('Invalid authentication frame.')
-        login_token = ws.cookies.get(SESSION_COOKIE) or str(auth.get('token', ''))
+        login_token = ''
+        ticket = auth.get('ticket')
+        if isinstance(ticket, str) and ticket:
+            with _ws_ticket_lock:
+                issued = ws_tickets.pop(ticket, None)
+            if not issued or issued[0] != room_id or issued[3] <= time.time():
+                raise HTTPException(401, 'Room connection ticket expired. Reconnect and try again.')
+            _, ticket_user_id, login_token, _ = issued
+        else:
+            ticket_user_id = None
+            login_token = ws.cookies.get(SESSION_COOKIE) or str(auth.get('token', ''))
         with SessionLocal() as db:
             user = user_from_token(login_token, db)
+            if ticket_user_id is not None and user.id != ticket_user_id:
+                raise HTTPException(401, 'Room connection ticket is invalid.')
             room = access(db, room_id, user)
             user_id = user.id
         old = connections.setdefault(room_id, {}).get(user_id)
