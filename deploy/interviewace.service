@@ -1,0 +1,25 @@
+# Example for a Linux host; replace paths and provision the interviewace OS user.
+[Unit]
+Description=InterviewAce FastAPI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=interviewace
+Group=interviewace
+WorkingDirectory=/opt/interviewace
+Environment=COOKIE_SECURE=true
+Environment=ENABLE_CODE_EXECUTION=false
+ExecStart=/opt/interviewace/.venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --workers 1 --ws-max-size 32768 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/interviewace/data
+
+[Install]
+WantedBy=multi-user.target

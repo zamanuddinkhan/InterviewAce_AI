@@ -1,0 +1,5 @@
+Backend API Interview Study Notes
+FastAPI is a Python web framework for building APIs using type hints. Pydantic provides request-data validation. OpenAPI documentation is typically available at /docs.
+REST endpoints use HTTP methods such as GET to read and POST to create. Server-side authorization must be checked on each protected resource.
+JWT is a signed token carrying claims. Sensitive credentials should not be embedded in token payloads. Use HTTPS in deployed systems and expiration dates for tokens.
+SQLAlchemy is a Python toolkit and ORM that maps application models to database tables. Commit transactions only when all changes are ready.

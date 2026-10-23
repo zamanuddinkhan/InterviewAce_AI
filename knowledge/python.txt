@@ -1,0 +1,6 @@
+Python Interview Study Notes
+A list is mutable, uses square brackets, and allows changing elements. A tuple is immutable, uses parentheses, and is useful when a sequence should not change.
+Python dictionaries store key-value pairs. Keys must be hashable. Typical dictionary lookups are average O(1), but worst-case behavior can differ.
+A generator uses yield to produce values lazily instead of keeping every value in memory. This can reduce memory usage for large streams.
+A decorator is a callable that wraps or transforms another callable. It is often used for logging, authentication, caching, and timing.
+Python exceptions should be caught narrowly, and code should avoid swallowing errors without logging or recovery.

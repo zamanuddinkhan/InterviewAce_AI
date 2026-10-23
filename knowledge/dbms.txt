@@ -1,0 +1,6 @@
+DBMS Interview Study Notes
+A primary key uniquely identifies a row. A foreign key references another table's key and helps maintain referential integrity.
+Normalization reduces duplication and update anomalies. In first normal form values are atomic; second normal form removes partial dependencies; third normal form removes transitive dependencies from non-key attributes.
+An index can speed up certain database queries but adds storage and can slow down writes. Evaluate with realistic query patterns.
+A database transaction groups operations. ACID stands for Atomicity, Consistency, Isolation, and Durability.
+SQL joins combine records across tables. An INNER JOIN returns matching records, while a LEFT JOIN also keeps unmatched left-side rows.
