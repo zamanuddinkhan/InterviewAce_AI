@@ -101,13 +101,17 @@ def event(db, room, user, kind, payload):
     return row
 
 
-def snapshot(room, user):
+def snapshot(db, room, user):
     remaining = max(0, math.ceil(room.started_at + room.duration_seconds - time.time())) if room.status == 'active' else 0
+    interviewer = db.get(User, room.interviewer_id)
+    candidate = db.get(User, room.candidate_id) if room.candidate_id is not None else None
     return {'id': room.id, 'topic': room.topic, 'status': room.status,
             'duration_seconds': room.duration_seconds, 'started_at': room.started_at,
             'ended_at': room.ended_at, 'remaining_seconds': remaining,
             'candidate_joined': room.candidate_id is not None,
             'role': 'interviewer' if room.interviewer_id == user.id else 'candidate',
+            'interviewer_name': interviewer.name if interviewer else 'Interviewer',
+            'candidate_name': candidate.name if candidate else None,
             'code': room.code, 'problem': room.problem}
 
 
@@ -172,7 +176,7 @@ def create(body: CreateRoom, user: User = Depends(current_user), db: Session = D
     room = PeerRoom(id=secrets.token_hex(6).upper(), interviewer_id=user.id,
                     topic=body.topic.strip(), duration_seconds=body.duration_seconds)
     db.add(room); db.commit(); db.refresh(room)
-    return snapshot(room, user)
+    return snapshot(db, room, user)
 
 
 @router.get('')
@@ -187,7 +191,7 @@ def history(user: User = Depends(current_user), db: Session = Depends(get_db)):
         until = pending.get(room.id)
         if until and room.interviewer_id != user.id:
             continue
-        row = snapshot(room, user)
+        row = snapshot(db, room, user)
         row['delete_after'] = until
         result.append(row)
     return result
@@ -201,17 +205,17 @@ def join(room_id: str, user: User = Depends(current_user), db: Session = Depends
     if deletion_state(db, [room_id]).get(room_id):
         raise HTTPException(404, 'Room not found.')
     if user.id in (room.interviewer_id, room.candidate_id):
-        return snapshot(room, user)
+        return snapshot(db, room, user)
     if room.candidate_id is not None or room.status != 'waiting':
         raise HTTPException(409, 'Room is full or has already started.')
     room.candidate_id = user.id; db.commit()
-    return snapshot(room, user)
+    return snapshot(db, room, user)
 
 
 @router.get('/{room_id}')
 def details(room_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
     room = access(db, room_id, user)
-    data = snapshot(room, user)
+    data = snapshot(db, room, user)
     rows = db.scalars(select(RoomEvent).where(RoomEvent.room_id == room_id).order_by(RoomEvent.id)).all()
     data['events'] = [{'kind': r.kind, 'user_id': r.user_id, 'payload': r.payload} for r in rows
                       if r.kind != 'rag_draft' or user.id == room.interviewer_id]
@@ -228,7 +232,7 @@ async def start(room_id: str, user: User = Depends(current_user), db: Session = 
         raise HTTPException(409, 'A candidate must join a waiting room first.')
     room.status = 'active'; room.started_at = time.time(); db.commit()
     await broadcast(room_id, {'type': 'refresh'})
-    return snapshot(room, user)
+    return snapshot(db, room, user)
 
 
 @router.post('/{room_id}/end')
@@ -237,7 +241,7 @@ async def end(room_id: str, user: User = Depends(current_user), db: Session = De
     if room.status != 'completed':
         room.status = 'completed'; room.ended_at = time.time(); db.commit()
     await broadcast(room_id, {'type': 'refresh'})
-    return snapshot(room, user)
+    return snapshot(db, room, user)
 
 
 @router.post('/{room_id}/questions')
@@ -622,7 +626,7 @@ async def live(ws: WebSocket, room_id: str):
                     with SessionLocal() as db:
                         u = user_from_token(login_token, db, touch=False)
                         room = access(db, room_id, u)
-                        data = snapshot(room, u)
+                        data = snapshot(db, room, u)
                 except HTTPException:
                     await ws.close(code=1008, reason='Session expired or access revoked.')
                     return
