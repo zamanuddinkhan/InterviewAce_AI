@@ -81,8 +81,8 @@ To stop the backend process, press **Ctrl+C** in the CMD window running `run.cmd
 - Custom AI interview focus and 1–50 questions, first-initial preview while the camera is off, accessible camera/microphone/power icons, and public Services, Contact, Terms and Privacy information.
 - Two-person peer rooms, invitations and a server-controlled maximum 15-minute timer.
 - WebSocket chat, read-only interviewer code view, shared results and direct WebRTC audio/video.
-- Candidate-only Python execution and final submission in restricted Docker containers.
-- Private PDF, DOCX, PPTX and image sharing; local page/slide/caption-grounded RAG drafts; one combined AI resume picker/uploader; resume assessment, consented speech metrics, human feedback, reports and history charts.
+- Interviewer coding editor with 12 ready-made Python challenges, editable problem details, custom-problem preview, and candidate-only execution/final submission in restricted Docker containers.
+- Private PDF, DOCX, PPTX and image sharing; local page/slide/caption-grounded RAG drafts; one combined AI resume picker/uploader; resume assessment, consented speech metrics, human feedback, readable weighted reports with missing-score guidance, JSON downloads and history charts.
 - Room deletion uses a five-second server-side undo window before the room and its shared files are permanently removed.
 - Solo AI practice with adaptive LangGraph difficulty.
 - Additive MySQL account migration, integrity-tested backups and recovery drills, health/monitoring endpoints, security headers, bounded throttling and deployment templates.
@@ -91,22 +91,29 @@ To stop the backend process, press **Ctrl+C** in the CMD window running `run.cmd
 
 ```mermaid
 flowchart LR
-    Browser[Browser: HTML, CSS, JavaScript] -->|Local: same-origin HTTP /api| API[FastAPI backend]
-    Vercel[Vercel static frontend] -->|Production: /api rewrite over HTTPS Funnel| API
-    Browser <-->|Peer-room WebSocket events and signaling| API
-    BrowserA[Candidate browser] <-->|WebRTC audio/video| BrowserB[Interviewer browser]
-    API --> DB[(MySQL: accounts, rooms, results, reports)]
-    API --> Ollama[Ollama: local chat and embeddings]
-    API --> Docker[Docker: restricted Python runner]
-    API --> Files[Project data folder: uploads and local indexes]
+    Browser[Browser: HTML · CSS · JavaScript] -->|Local same-origin HTTP| Local[Local FastAPI]
+    Browser -->|Production static site| Vercel[Vercel frontend]
+    Browser -->|Same-origin HTTPS /api| Vercel
+    Vercel -->|HTTPS rewrite| Funnel[Tailscale Funnel]
+    Funnel --> API[FastAPI on owner PC<br/>one Uvicorn worker]
+    Browser <-->|Room WSS via Funnel<br/>short-lived one-use ticket| API
+    BrowserA[Candidate browser] <-->|Direct WebRTC media| BrowserB[Interviewer browser]
+    Local --> API
+    API --> DB[(MySQL<br/>users · sessions · rooms · results)]
+    API --> Files[(Private data folder<br/>uploads · Chroma · caches · backups)]
+    API --> AI[Ollama · LangChain · LangGraph<br/>local AI and retrieval]
+    API --> Whisper[Optional Faster-Whisper<br/>consented speech analysis]
+    API --> Docker[Docker CLI<br/>restricted Python runner]
 ```
 
 - The frontend is plain HTML/CSS/JavaScript; it has no Node/npm build step. FastAPI serves it during local development. In production, Vercel serves these static files.
-- Browser HTTP requests use `/api`. Locally they go straight to FastAPI. On the deployed site Vercel rewrites them through Tailscale Funnel to the backend on the maintainer's PC.
-- FastAPI checks requests, permissions and sessions, then reads/writes MySQL. It stores uploaded documents and local retrieval indexes under `data/`.
+- Browser HTTP requests use `/api`. Locally they go to FastAPI. On the deployed site, the browser calls Vercel and Vercel rewrites API requests through Tailscale Funnel to the backend on the maintainer's PC. Peer-room WebSockets connect to the PC through Funnel with a room-scoped, short-lived, single-use ticket. Login tokens are not put into WebSocket URLs.
+- FastAPI checks requests, permissions and sessions, then reads/writes MySQL. It stores uploaded documents and local retrieval indexes/caches under `data/`.
 - Ollama runs the configured chat and embedding models on the backend PC. LangChain/LangGraph coordinate retrieval and interview practice. Docker runs candidate Python submissions in a restricted container.
-- Peer-room chat, code updates and call setup use authenticated WebSocket events. Browsers send audio/video to each other through WebRTC; the backend coordinates signaling and room permissions.
+- Peer-room chat, code updates and call setup use authenticated WebSocket events. Browsers send audio/video to each other directly through WebRTC; the backend coordinates signaling and room permissions. No TURN relay is included, so some remote networks may block media even when chat works.
 - Passwords are hashed; browser sessions use HttpOnly cookies. Private settings and credentials belong in `.env`, which must never be committed or uploaded to Vercel.
+
+For the detailed system architecture, data flow, trust boundaries, module map, report formula and feature behavior, see [Project guide — Architecture](docs/PROJECT_GUIDE.md#2-architecture).
 
 ### Main user flows
 
@@ -122,7 +129,7 @@ For the hosted deployment, the frontend is on Vercel but the backend and its dat
 
 | Document | Contents |
 | --- | --- |
-| [Project guide](docs/PROJECT_GUIDE.md) | Architecture, all feature flows, validation, authentication, sessions, roles, scoring, storage, configuration and source map |
+| [Project guide](docs/PROJECT_GUIDE.md) | Full architecture and source map, data flows, validation, authentication, sessions, roles, scoring, storage and configuration |
 | [Operations guide](docs/OPERATIONS.md) | Installation, startup, migrations, backup/recovery, monitoring, troubleshooting, deployment, durability and scaling limits |
 | [API reference](docs/API.md) | Generated routes, authorization requirements, request models and validation limits |
 | [Data dictionary](docs/DATA_DICTIONARY.md) | Generated tables, columns, types, indexes and foreign keys |
