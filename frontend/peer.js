@@ -237,6 +237,11 @@ window.Peer = (() => {
     const interviewer = room.role === 'interviewer';
     if (interviewer && room.problem && !problemDraftActive) syncProblemForm(room.problem);
     el('peerTitle').textContent = room.topic;
+    const names = room.role === 'interviewer'
+      ? {local: room.interviewer_name, remote: room.candidate_name}
+      : {local: room.candidate_name, remote: room.interviewer_name};
+    el('localVideoLabel').textContent = names.local || (room.role === 'interviewer' ? 'Interviewer' : 'Candidate');
+    el('remoteVideoLabel').textContent = names.remote || (room.role === 'interviewer' ? 'Candidate' : 'Interviewer');
     const statusText=room.status==='waiting' ? (room.candidate_joined?'Candidate joined — ready to start':'Waiting for a candidate') : room.status==='active'?'Interview in progress':'Interview completed';
     el('peerIdentity').textContent=`You are the ${room.role}. ${statusText}.`;
     el('peerRoomCode').textContent=`Room code: ${room.id}`;
