@@ -1,0 +1,48 @@
+{
+    "$schema":  "https://openapi.vercel.sh/vercel.json",
+    "rewrites":  [
+                     {
+                         "destination":  "https://laptop-v0p0dfct.tail9221c5.ts.net/api",
+                         "source":  "/api"
+                     },
+                     {
+                         "destination":  "https://laptop-v0p0dfct.tail9221c5.ts.net/api/:path*",
+                         "source":  "/api/:path*"
+                     },
+                     {
+                         "destination":  "/:path*",
+                         "source":  "/assets/:path*"
+                     }
+                 ],
+    "headers":  [
+                    {
+                        "headers":  [
+                                        {
+                                            "key":  "Content-Security-Policy",
+                                            "value":  "default-src \u0027self\u0027; script-src \u0027self\u0027; style-src \u0027self\u0027; img-src \u0027self\u0027 data: blob:; connect-src \u0027self\u0027 wss://laptop-v0p0dfct.tail9221c5.ts.net; media-src \u0027self\u0027 blob:; object-src \u0027none\u0027; frame-ancestors \u0027none\u0027; base-uri \u0027self\u0027; form-action \u0027self\u0027"
+                                        },
+                                        {
+                                            "key":  "Permissions-Policy",
+                                            "value":  "camera=(self), microphone=(self), geolocation=()"
+                                        },
+                                        {
+                                            "key":  "Referrer-Policy",
+                                            "value":  "same-origin"
+                                        },
+                                        {
+                                            "key":  "Strict-Transport-Security",
+                                            "value":  "max-age=31536000"
+                                        },
+                                        {
+                                            "key":  "X-Content-Type-Options",
+                                            "value":  "nosniff"
+                                        },
+                                        {
+                                            "key":  "X-Frame-Options",
+                                            "value":  "DENY"
+                                        }
+                                    ],
+                        "source":  "/(.*)"
+                    }
+                ]
+}
