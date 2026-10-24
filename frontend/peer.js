@@ -26,6 +26,23 @@ window.Peer = (() => {
     {key:'resume',title:'Resume rules',weight:.1,source:'The candidate uploads a resume in Shared files.'}
   ];
   const el = id => document.getElementById(id);
+  const LANGUAGE_LABELS = {python:'Python', javascript:'JavaScript', c:'C', cpp:'C++'};
+  function languageLabel(language) { return LANGUAGE_LABELS[language] || LANGUAGE_LABELS.python; }
+  function setLanguage(language, announce) {
+    const selected = LANGUAGE_LABELS[language] ? language : 'python';
+    el('languageSelect').value = selected;
+    el('languageBadge').textContent = languageLabel(selected);
+    el('codeEditorLabel').textContent = `${languageLabel(selected)} editor`;
+    el('peerCode').setAttribute('aria-label', `${languageLabel(selected)} source code`);
+    if (announce && room?.problem) {
+      room.problem = {...room.problem, language: selected};
+      clearTimeout(codeDebounce);
+      codeDebounce = setTimeout(() => {
+        try { send({type:'code', source:el('peerCode').value, language:selected}); }
+        catch (error) { toast(error.message, true); }
+      }, 400);
+    }
+  }
   const action = fn => async event => {
     event?.preventDefault();
     const button = event?.submitter || (event?.currentTarget?.tagName === 'BUTTON' ? event.currentTarget : null);
@@ -255,6 +272,9 @@ window.Peer = (() => {
     el('peerEnd').classList.toggle('hidden', !interviewer || room.status === 'completed');
     el('documentKind').querySelector('[value=resume]').disabled = interviewer;
     if (interviewer) el('documentKind').value = 'resource';
+    const language = room.problem?.language || el('languageSelect').value || 'python';
+    setLanguage(language, false);
+    el('languageSelect').disabled = interviewer || room.status !== 'active';
     el('peerCode').readOnly = interviewer || room.status !== 'active';
     if (document.activeElement !== el('peerCode') || interviewer) el('peerCode').value = room.code;
     const previewing = interviewer && (!room.problem || problemDraftActive);
@@ -264,7 +284,7 @@ window.Peer = (() => {
     el('sharedProblemTests').textContent = problem ? (problem.tests?.length ? JSON.stringify(problem.tests, null, 2) : 'Add valid JSON test cases to preview them.') : '';
     el('editorHint').textContent=interviewer
       ? (previewing ? 'This is a live preview. Click Assign coding problem to send this challenge to the candidate.' : 'You are the interviewer: this is the candidate’s read-only code. The assigned problem is shown above.')
-      : room.status!=='active'?'Your Python editor is here. It unlocks when the interviewer starts the session.':!problem?'You can write code now. Run and Submit unlock after the interviewer assigns a problem.':'Write your solution below, run the tests, then submit your final answer.';
+      : room.status!=='active'?`Your ${languageLabel(language)} editor is here. It unlocks when the interviewer starts the session.`:!problem?'You can write code now. Run and Submit unlock after the interviewer assigns a problem.':'Write your solution below, run the tests, then submit your final answer.';
     const chat = el('peerChat'); chat.replaceChildren();
     for (const event of room.events) {
       if (['chat', 'question'].includes(event.kind)) {
@@ -484,7 +504,10 @@ window.Peer = (() => {
         if(message.status==='active')el('peerTimer').textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
         el('peerTimer').classList.toggle('low', message.status === 'active' && seconds <= 60);
         if (room.status !== message.status) await refresh();
-      } else if (message.type === 'code' && room.role === 'interviewer') el('peerCode').value = message.source;
+      } else if (message.type === 'code' && room.role === 'interviewer') {
+        el('peerCode').value = message.source;
+        if (message.language) setLanguage(message.language, false);
+      }
       else if (['offer','answer','ice'].includes(message.type)) await signal(message);
       else if (message.type === 'error') toast(message.message, true);
       else if (message.type === 'deleted') { close(); await history(); }
@@ -644,8 +667,9 @@ window.Peer = (() => {
       await refresh();
     });
     ['problemTitle','problemStatement','problemConstraints','problemStarter','problemTests'].forEach(id => el(id).addEventListener('input', () => { problemDraftActive = true; renderProblemPreview(); }));
-    el('peerCode').oninput = () => { clearTimeout(codeDebounce); codeDebounce = setTimeout(() => { try { send({type:'code',source:el('peerCode').value}); } catch(e) { toast(e.message,true); } }, 400); };
-    for (const [id, final] of [['runCode',false],['submitCode',true]]) el(id).onclick = action(async () => { el('codeResults').textContent = 'Running in the local sandbox…'; try { await request('/execute', {source:el('peerCode').value,final}); await refresh(); } catch(e) { el('codeResults').textContent = e.message; throw e; } });
+    el('languageSelect').onchange = () => { setLanguage(el('languageSelect').value, true); };
+    el('peerCode').oninput = () => { clearTimeout(codeDebounce); codeDebounce = setTimeout(() => { try { send({type:'code',source:el('peerCode').value,language:el('languageSelect').value}); } catch(e) { toast(e.message,true); } }, 400); };
+    for (const [id, final] of [['runCode',false],['submitCode',true]]) el(id).onclick = action(async () => { el('codeResults').textContent = 'Running in the local sandbox…'; try { await request('/execute', {source:el('peerCode').value,language:el('languageSelect').value,final}); await refresh(); } catch(e) { el('codeResults').textContent = e.message; throw e; } });
     el('peerChatForm').onsubmit = action(async () => { send({type:'chat',text:el('peerMessage').value}); el('peerMessage').value = ''; });
     el('peerPdf').onchange = () => {
       const isImage = /\.(png|jpe?g|gif|webp)$/i.test(el('peerPdf').files[0]?.name || '');

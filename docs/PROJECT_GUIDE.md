@@ -148,7 +148,7 @@ After login, Home remains visible with a personalized card and clear AI Practice
 | Create a room | Authenticated user, becoming its interviewer |
 | Join a waiting room | A second authenticated user, becoming its candidate |
 | Start/end, set questions/problems, generate private RAG drafts | That room's interviewer |
-| Edit/synchronize/run/submit Python code | That room's candidate while active |
+| Edit/synchronize/run/submit code in Python, JavaScript, C, or C++ | That room's candidate while active |
 | Chat and direct media | Either participant while active |
 | Upload learning resources in supported formats | Either participant before completion |
 | Upload a resume | Candidate only |
@@ -265,7 +265,7 @@ Account deletion removes owned records and associated files. Room deletion remov
 | `backend/app/schema.py` | Idempotent additive legacy account migration |
 | `backend/app/config.py`, `db.py`, `models.py` | Environment, SQLAlchemy engine/sessions and MySQL schema |
 | `backend/app/peer.py` | Room CRUD, authorization, WebSockets, RAG, speech and report composition |
-| `backend/app/runner.py`, `sandbox/Dockerfile` | Restricted Python execution and its image |
+| `backend/app/runner.py`, `sandbox/Dockerfile` | Restricted Python, JavaScript, C, and C++ execution and its image |
 | `backend/app/ai.py`, `graph.py`, `rag.py`, `backend/ingest.py` | Local model integration, adaptive solo flow and curated knowledge indexing |
 | `backend/app/analysis.py` | Explainable resume/communication formulas |
 | `backend/local_mysql.py`, `run.ps1` | Isolated native MySQL provisioning/check/start and application startup |

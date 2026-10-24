@@ -59,6 +59,7 @@ class ProblemBody(BaseModel):
 class CodeBody(BaseModel):
     source: str = Field(min_length=1, max_length=20000)
     final: bool = False
+    language: str = Field(default='python', pattern='^(python|javascript|c|cpp)$')
 
 class FeedbackBody(BaseModel):
     technical: float = Field(ge=0, le=100)
@@ -276,7 +277,10 @@ async def execute(room_id: str, body: CodeBody, user: User = Depends(current_use
         assigned_problem = room.problem
         tests = assigned_problem['tests']
         try:
-            result = await run_in_threadpool(runner.execute, body.source, tests)
+            if body.language == 'python':
+                result = await run_in_threadpool(runner.execute, body.source, tests)
+            else:
+                result = await run_in_threadpool(runner.execute, body.source, tests, body.language)
         except (RuntimeError, OSError) as exc:
             raise HTTPException(503, str(exc)) from exc
         # Recheck the authoritative deadline after the runner returns.
@@ -284,6 +288,7 @@ async def execute(room_id: str, body: CodeBody, user: User = Depends(current_use
         if room.problem != assigned_problem:
             raise HTTPException(409, 'The coding problem changed during execution. Run the current problem again.')
         room.code = body.source
+        room.problem = {**room.problem, 'language': body.language}
         result.update({'source': body.source, 'final': body.final})
         event(db, room, user, 'submission' if body.final else 'execution', result)
         await broadcast(room_id, {'type': 'refresh'})
@@ -657,7 +662,12 @@ async def live(ws: WebSocket, room_id: str):
                 elif kind == 'code':
                     access(db, room_id, user, 'candidate', active=True)
                     room.code = str(message.get('source', ''))[:20000]; db.commit()
-                    await broadcast_signal(room_id, user_id, {'type': 'code', 'source': room.code})
+                    language = str(message.get('language', 'python'))
+                    if language not in ('python', 'javascript', 'c', 'cpp'):
+                        raise HTTPException(422, 'Unsupported code language.')
+                    room.problem = {**room.problem, 'language': language} if room.problem else room.problem
+                    db.commit()
+                    await broadcast_signal(room_id, user_id, {'type': 'code', 'source': room.code, 'language': language})
     except HTTPException as exc:
         with suppress(Exception):
             await ws.send_json({'type': 'error', 'message': exc.detail})
