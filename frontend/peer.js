@@ -2,9 +2,29 @@
 window.Peer = (() => {
   let mounted = false, room = null, socket = null, stream = null, pc = null, recorder = null;
   let reconnect = null, codeDebounce = null, candidates = [], recordingChunks = [], lastStatus = '', refreshing = false, refreshAgain = false, connecting = false;
-  let mounting = null, roomTab = 'live', devices = null, makingOffer = false, ignoreOffer = false;
+  let mounting = null, roomTab = 'live', devices = null, makingOffer = false, ignoreOffer = false, problemDraftActive = false, syncedProblemState = '';
   let remoteStream = null, previewUrl = null;
   const deletionTimers = new Map();
+  const PROBLEM_BANK = {
+    sum: {title:'Sum two integers',statement:'Read two integers from standard input and print their sum.',constraints:'Both integers are between -1,000,000 and 1,000,000.',starter:'a, b = map(int, input().split())\n# Print the sum',tests:[{input:'2 3\n',expected:'5'},{input:'-1 4\n',expected:'3'}]},
+    reverse: {title:'Reverse a string',statement:'Read one line and print its characters in reverse order.',constraints:'The input contains 1–1,000 characters.',starter:'text = input()\n# Print the reversed text',tests:[{input:'hello\n',expected:'olleh'},{input:'python\n',expected:'nohtyp'}]},
+    palindrome: {title:'Check a palindrome',statement:'Read one word and print True if it reads the same forwards and backwards when letter case is ignored; otherwise print False.',constraints:'The input is one non-empty word containing letters.',starter:'word = input().strip().lower()\n# Print whether word is a palindrome',tests:[{input:'Racecar\n',expected:'True'},{input:'Interview\n',expected:'False'}]},
+    factorial: {title:'Calculate a factorial',statement:'Read a non-negative integer n and print n factorial. By definition, 0 factorial is 1.',constraints:'0 ≤ n ≤ 20.',starter:'n = int(input())\n# Calculate and print n factorial',tests:[{input:'0\n',expected:'1'},{input:'5\n',expected:'120'}]},
+    maximum: {title:'Find the largest of three numbers',statement:'Read three space-separated integers and print the largest.',constraints:'The input always contains exactly three integers.',starter:'numbers = list(map(int, input().split()))\n# Print the largest number',tests:[{input:'3 9 4\n',expected:'9'},{input:'-5 -2 -8\n',expected:'-2'}]},
+    vowels: {title:'Count vowels',statement:'Read a line and print the number of English vowels (a, e, i, o, u), ignoring letter case.',constraints:'The line contains at most 1,000 characters.',starter:'text = input().lower()\n# Count and print the vowels',tests:[{input:'InterviewAce\n',expected:'6'},{input:'rhythm\n',expected:'0'}]},
+    fibonacci: {title:'Find a Fibonacci number',statement:'Read n and print the zero-indexed Fibonacci number F(n), where F(0)=0 and F(1)=1.',constraints:'0 ≤ n ≤ 30.',starter:'n = int(input())\na, b = 0, 1\n# Calculate F(n) and print it',tests:[{input:'0\n',expected:'0'},{input:'7\n',expected:'13'}]},
+    prime: {title:'Check for a prime number',statement:'Read an integer and print True if it is prime; otherwise print False.',constraints:'2 ≤ n ≤ 1,000,000.',starter:'n = int(input())\n# Check whether n is prime',tests:[{input:'2\n',expected:'True'},{input:'21\n',expected:'False'}]},
+    deduplicate: {title:'Remove duplicate numbers',statement:'Read space-separated integers and print each number once, preserving its first-seen order.',constraints:'The input contains at least one integer.',starter:'numbers = list(map(int, input().split()))\n# Print unique numbers in their original order',tests:[{input:'1 2 1 3 2\n',expected:'1 2 3'},{input:'4 4 4\n',expected:'4'}]},
+    secondLargest: {title:'Find the second-largest distinct number',statement:'Read space-separated integers and print the second-largest distinct value.',constraints:'The input contains at least two distinct integers.',starter:'numbers = list(map(int, input().split()))\n# Find and print the second-largest distinct number',tests:[{input:'4 1 7 7 3\n',expected:'4'},{input:'10 2 8\n',expected:'8'}]},
+    binarySearch: {title:'Binary search',statement:'Read n, then n sorted space-separated integers, then a target. Print the target index (zero-based), or -1 if it is absent.',constraints:'The list is sorted in ascending order and 0 ≤ n ≤ 1,000.',starter:'n = int(input())\nvalues = list(map(int, input().split()))\ntarget = int(input())\n# Print the zero-based index or -1',tests:[{input:'5\n1 3 5 7 9\n7\n',expected:'3'},{input:'4\n2 4 6 8\n5\n',expected:'-1'}]},
+    fizzBuzz: {title:'FizzBuzz',statement:'Read n. For each number from 1 through n, print FizzBuzz when divisible by both 3 and 5, Fizz when divisible by 3, Buzz when divisible by 5, or the number otherwise. Print one result per line.',constraints:'1 ≤ n ≤ 100.',starter:'n = int(input())\nfor number in range(1, n + 1):\n    pass  # Replace this line with the FizzBuzz rules',tests:[{input:'5\n',expected:'1\n2\nFizz\n4\nBuzz'},{input:'3\n',expected:'1\n2\nFizz'}]}
+  };
+  const REPORT_COMPONENTS = [
+    {key:'coding',title:'Coding',weight:.4,source:'Submit a final solution from the Coding editor.'},
+    {key:'technical',title:'Interviewer technical & problem-solving',weight:.3,source:'The interviewer submits final feedback after ending the session.'},
+    {key:'communication',title:'Speech metrics',weight:.2,source:'The candidate records or uploads an answer and consents to analysis.'},
+    {key:'resume',title:'Resume rules',weight:.1,source:'The candidate uploads a resume in Shared files.'}
+  ];
   const el = id => document.getElementById(id);
   const action = fn => async event => {
     event?.preventDefault();
@@ -18,10 +38,62 @@ window.Peer = (() => {
   const send = data => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(data)); else throw new Error('Room connection is offline. Reconnect before continuing.'); };
   function line(parent, text, tag = 'p') { const item = document.createElement(tag); item.textContent = text; parent.append(item); return item; }
   function details(parent, title, data) { const d = document.createElement('details'); line(d, title, 'summary'); line(d, JSON.stringify(data, null, 2), 'pre'); parent.append(d); }
+  function setupProblemBank() {
+    const select = el('problemBank'); select.replaceChildren();
+    for (const [key, problem] of Object.entries(PROBLEM_BANK)) select.add(new Option(problem.title, key));
+    select.add(new Option('Write a custom problem', 'custom'));
+    select.value = 'sum';
+    updateProblemForm();
+    select.onchange = () => { problemDraftActive = true; updateProblemForm(); };
+  }
+  function updateProblemForm() {
+    const custom = el('problemBank').value === 'custom', problem = PROBLEM_BANK[el('problemBank').value];
+    const fields = [['problemTitle','title'],['problemStatement','statement'],['problemConstraints','constraints'],['problemStarter','starter']];
+    for (const [id, key] of fields) { el(id).value = custom ? '' : problem[key]; el(id).placeholder = custom ? `Enter ${key === 'title' ? 'a title' : key === 'statement' ? 'the problem statement' : key === 'constraints' ? 'optional constraints' : 'optional starter code'}` : ''; }
+    el('problemTests').value = custom ? '' : JSON.stringify(problem.tests, null, 2);
+    el('problemTests').placeholder = '[{"input":"2 3\\n","expected":"5"}]';
+    el('problemModeHelp').textContent = custom
+      ? 'Write your own title and statement, then provide 1–5 test cases as a JSON array with input and expected output.'
+      : 'Choose a ready-to-use problem. You can edit its details and test cases before assigning it.';
+    el('problemSubmit').textContent = custom ? 'Send custom problem' : 'Assign coding problem';
+    renderProblemPreview();
+  }
+  function problemDraft() {
+    let tests = [];
+    try { tests = JSON.parse(el('problemTests').value); } catch {}
+    return {title:el('problemTitle').value.trim(), statement:el('problemStatement').value.trim(),
+      constraints:el('problemConstraints').value.trim(), starter:el('problemStarter').value,
+      tests:Array.isArray(tests) ? tests : []};
+  }
+  function syncProblemForm(problem) {
+    const signature = JSON.stringify(problem);
+    if (signature === syncedProblemState) return;
+    syncedProblemState = signature;
+    const preset = Object.entries(PROBLEM_BANK).find(([, item]) => JSON.stringify(item) === JSON.stringify(problem));
+    el('problemBank').value = preset ? preset[0] : 'custom';
+    updateProblemForm();
+    if (!preset) {
+      el('problemTitle').value = problem.title || '';
+      el('problemStatement').value = problem.statement || '';
+      el('problemConstraints').value = problem.constraints || '';
+      el('problemStarter').value = problem.starter || '';
+      el('problemTests').value = JSON.stringify(problem.tests || [], null, 2);
+      el('problemModeHelp').textContent = 'This problem is assigned. Edit it here and send it again to replace it before the candidate submits.';
+    }
+    el('problemSubmit').textContent = 'Update coding problem';
+  }
+  function renderProblemPreview() {
+    if (!room || room.role !== 'interviewer' || (room.problem && !problemDraftActive)) return;
+    const draft = problemDraft();
+    el('sharedProblemTitle').textContent = draft.title || (el('problemBank').value === 'custom' ? 'Custom problem draft' : 'Problem preview');
+    el('sharedProblemStatement').textContent = `${draft.statement || 'Add a problem statement in the form to preview it.'}${draft.constraints ? `\nConstraints: ${draft.constraints}` : ''}`;
+    el('sharedProblemTests').textContent = draft.tests.length ? JSON.stringify(draft.tests, null, 2) : 'Add valid JSON test cases to preview them.';
+    el('editorHint').textContent = 'Preview only. Click Assign coding problem to send this challenge to the candidate.';
+  }
   async function show() {
     if (!mounted) {
       if (!mounting) mounting = (async () => {
-      const markup = await fetch('/assets/peer.html?v=3.3.0').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
+      const markup = await fetch('/assets/peer.html?v=3.3.6').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
       const wrapper = document.createElement('div'); wrapper.id = 'peerWorkspace'; wrapper.innerHTML = markup;
       const solo = document.createElement('section'); solo.className = 'solo-studio'; solo.id='soloStudio';
       while (el('workspace').firstChild) solo.append(el('workspace').firstChild);
@@ -57,6 +129,7 @@ window.Peer = (() => {
     el('peerStart').disabled=room.status!=='waiting' || !room.candidate_joined;
     el('peerRoom').querySelectorAll('#sendQuestion button, #problemForm button, #peerChatForm button').forEach(button=>button.disabled=!active);
     const submitted=room.events?.some(event=>event.kind==='submission');
+    el('problemSubmit').disabled = !active || !!submitted;
     el('runCode').disabled=el('submitCode').disabled=!active || !candidate || !room.problem || submitted;
     el('peerCode').readOnly=!candidate || !active || !!submitted;
     el('enableMedia').disabled=ended;
@@ -142,7 +215,7 @@ window.Peer = (() => {
       line(row, `Interview ${index + 1}`, 'span');
       const meter = document.createElement('meter'); meter.min = 0; meter.max = 100; meter.value = score;
       meter.setAttribute('aria-label', `Interview ${index + 1} overall score`); row.append(meter);
-      line(row, `${score}/100`, 'strong'); list.append(row);
+      line(row, `${Number(score).toFixed(1).replace(/\.0$/, '')}%`, 'strong'); list.append(row);
     });
     container.append(list);
   }
@@ -162,6 +235,7 @@ window.Peer = (() => {
   }
   function render() {
     const interviewer = room.role === 'interviewer';
+    if (interviewer && room.problem && !problemDraftActive) syncProblemForm(room.problem);
     el('peerTitle').textContent = room.topic;
     const statusText=room.status==='waiting' ? (room.candidate_joined?'Candidate joined — ready to start':'Waiting for a candidate') : room.status==='active'?'Interview in progress':'Interview completed';
     el('peerIdentity').textContent=`You are the ${room.role}. ${statusText}.`;
@@ -178,11 +252,14 @@ window.Peer = (() => {
     if (interviewer) el('documentKind').value = 'resource';
     el('peerCode').readOnly = interviewer || room.status !== 'active';
     if (document.activeElement !== el('peerCode') || interviewer) el('peerCode').value = room.code;
-    const problem = room.problem;
-    el('sharedProblemTitle').textContent = problem?.title || 'Waiting for a problem';
-    el('sharedProblemStatement').textContent = problem ? `${problem.statement}\nConstraints: ${problem.constraints}` : '';
-    el('sharedProblemTests').textContent = problem ? JSON.stringify(problem.tests, null, 2) : '';
-    el('editorHint').textContent=interviewer?'You are the interviewer: this is the candidate’s read-only code. Assign a problem above; the candidate can run and submit.':room.status!=='active'?'Your Python editor is here. It unlocks when the interviewer starts the session.':!problem?'You can write code now. Run and Submit unlock after the interviewer assigns a problem.':'Write your solution below, run the tests, then submit your final answer.';
+    const previewing = interviewer && (!room.problem || problemDraftActive);
+    const problem = previewing ? problemDraft() : room.problem;
+    el('sharedProblemTitle').textContent = problem?.title || (previewing ? (el('problemBank').value === 'custom' ? 'Custom problem draft' : 'Problem preview') : 'Waiting for a problem');
+    el('sharedProblemStatement').textContent = problem ? `${problem.statement || 'Add a problem statement in the form to preview it.'}${problem.constraints ? `\nConstraints: ${problem.constraints}` : ''}` : '';
+    el('sharedProblemTests').textContent = problem ? (problem.tests?.length ? JSON.stringify(problem.tests, null, 2) : 'Add valid JSON test cases to preview them.') : '';
+    el('editorHint').textContent=interviewer
+      ? (previewing ? 'This is a live preview. Click Assign coding problem to send this challenge to the candidate.' : 'You are the interviewer: this is the candidate’s read-only code. The assigned problem is shown above.')
+      : room.status!=='active'?'Your Python editor is here. It unlocks when the interviewer starts the session.':!problem?'You can write code now. Run and Submit unlock after the interviewer assigns a problem.':'Write your solution below, run the tests, then submit your final answer.';
     const chat = el('peerChat'); chat.replaceChildren();
     for (const event of room.events) {
       if (['chat', 'question'].includes(event.kind)) {
@@ -246,20 +323,132 @@ window.Peer = (() => {
   function renderReport(report) {
     if (!room || room.id !== report.room_id) return;
     const target = el('peerReport'); target.replaceChildren(); target.classList.remove('hidden');
-    line(target, 'Final practice report', 'h2');
-    line(target, report.overall_score === null ? 'Score unavailable' : `${report.overall_score}/100`, 'h1');
-    line(target, `${Math.round(report.duration_seconds)} seconds · ${report.topic}`);
-    for (const [name, score] of Object.entries(report.scores)) {
-      const row = document.createElement('div'); row.className = 'score-row'; line(row, name); line(row, score === null ? 'Unavailable' : `${Math.round(score)}/100`, 'strong');
-      if (score !== null) { const meter = document.createElement('progress'); meter.max = 100; meter.value = score; meter.setAttribute('aria-label', name); row.append(meter); } target.append(row);
+    target.className = 'panel peer-report';
+    const scores = report.scores || {};
+    const weight = component => Number(report.weights?.[component.key] ?? component.weight);
+    const availableWeight = REPORT_COMPONENTS.reduce((sum, component) => sum + (Number.isFinite(scores[component.key]) ? weight(component) : 0), 0);
+    const availableCount = REPORT_COMPONENTS.filter(component => Number.isFinite(scores[component.key])).length;
+    const percent = value => `${Number(value).toFixed(1).replace(/\.0$/, '')}%`;
+    const section = (parent, title) => { const node = document.createElement('section'); node.className = 'report-block'; line(node, title, 'h3'); parent.append(node); return node; };
+
+    const intro = document.createElement('div'); intro.className = 'report-heading';
+    const titleGroup = document.createElement('div'); line(titleGroup, 'INTERVIEW SUMMARY', 'span').className = 'eyebrow';
+    line(titleGroup, 'Feedback & report', 'h2');
+    line(titleGroup, `${report.topic} · ${Math.round(report.duration_seconds)} seconds`, 'p').className = 'report-subtitle';
+    intro.append(titleGroup); target.append(intro);
+
+    const overview = document.createElement('section'); overview.className = `report-overview${availableCount ? '' : ' is-pending'}`;
+    const overviewCopy = document.createElement('div');
+    line(overviewCopy, availableCount ? 'Combined practice score' : 'Score pending', 'h3');
+    line(overviewCopy, availableCount
+      ? `${availableCount} of 4 categories are assessed. The displayed percentage uses the available categories.`
+      : 'No assessment evidence has been recorded yet. Scores are not guessed or filled with zero.', 'p');
+    overview.append(overviewCopy);
+    if (Number.isFinite(report.overall_score)) {
+      const score = document.createElement('div'); score.className = 'report-total';
+      line(score, percent(report.overall_score), 'strong'); line(score, 'out of 100', 'span'); overview.append(score);
+    } else line(overview, 'Add assessment evidence below to calculate your percentage.', 'strong').className = 'report-pending-hint';
+    target.append(overview);
+
+    const breakdown = section(target, 'Score breakdown');
+    line(breakdown, 'Scores are percentages. Base weights are 40%, 30%, 20% and 10%; available categories are proportionally renormalized.', 'p').className = 'report-section-help';
+    const grid = document.createElement('div'); grid.className = 'report-score-grid';
+    for (const component of REPORT_COMPONENTS) {
+      const score = scores[component.key], present = Number.isFinite(score), baseWeight = weight(component);
+      const card = document.createElement('article'); card.className = `report-score-card${present ? '' : ' is-missing'}`;
+      const head = document.createElement('div'); head.className = 'report-score-head';
+      line(head, component.title, 'h4'); line(head, `${Math.round(baseWeight * 100)}% weight`, 'span').className = 'weight-pill'; card.append(head);
+      line(card, present ? percent(score) : 'Not assessed', 'strong').className = 'report-component-score';
+      if (present) {
+        const meter = document.createElement('progress'); meter.max = 100; meter.value = Math.max(0, Math.min(100, score)); meter.setAttribute('aria-label', `${component.title} score ${percent(score)}`); card.append(meter);
+        const normalizedWeight = availableWeight ? baseWeight / availableWeight : 0;
+        const points = (score * normalizedWeight).toFixed(1).replace(/\.0$/, '');
+        line(card, `${percent(normalizedWeight * 100)} of this total · adds ${points} points`, 'p').className = 'report-score-meta';
+      } else line(card, component.source, 'p').className = 'report-score-meta';
+      grid.append(card);
     }
-    line(target, report.scoring_method, 'p');
-    if (report.interviewer_feedback) details(target, 'Human interviewer feedback', report.interviewer_feedback);
-    if (report.communication) details(target, 'Automated speech metrics', report.communication);
-    if (report.resume) details(target, 'Automated resume checks', report.resume);
-    if (report.coding) details(target, 'Final Python submission', report.coding);
-    line(target, 'Next steps', 'h3'); report.improvement_plan.forEach(s => line(target, s)); line(target, report.notice);
-    const button = line(target, 'Download report (JSON)', 'button'); button.className = 'secondary';
+    breakdown.append(grid);
+
+    const missing = REPORT_COMPONENTS.filter(component => !Number.isFinite(scores[component.key]));
+    if (missing.length) {
+      const actions = section(target, 'How to complete the report');
+      const list = document.createElement('ul'); list.className = 'report-next-list';
+      for (const component of missing) line(list, `${component.title}: ${component.source}`, 'li');
+      actions.append(list);
+    }
+
+    if (report.interviewer_feedback) {
+      const feedback = section(target, 'Human interviewer feedback');
+      const ratings = document.createElement('div'); ratings.className = 'report-rating-grid';
+      for (const [label, key] of [['Technical knowledge','technical'],['Problem solving','problem_solving'],['Communication','communication']]) {
+        const rating = document.createElement('div'); rating.className = 'report-rating';
+        line(rating, label, 'span'); line(rating, percent(report.interviewer_feedback[key]), 'strong'); ratings.append(rating);
+      }
+      feedback.append(ratings);
+      for (const [label, value] of [['Strengths',report.interviewer_feedback.strengths],['Areas to improve',report.interviewer_feedback.improvements]]) {
+        if (value) { const note = document.createElement('div'); note.className = 'report-note'; line(note, label, 'strong'); line(note, value, 'p'); feedback.append(note); }
+      }
+      line(feedback, 'Technical knowledge and problem solving form the human 30% score. The communication rating is shown for context; it does not replace consented speech metrics.', 'p').className = 'report-section-help';
+    }
+
+    if (report.coding) {
+      const coding = section(target, 'Final coding submission');
+      line(coding, `${report.coding.passed} of ${report.coding.total} tests passed`, 'strong');
+      for (const [index, test] of (report.coding.tests || []).entries()) {
+        const row = document.createElement('div'); row.className = `report-test${test.passed ? ' is-passed' : ' is-failed'}`;
+        line(row, `Test ${index + 1} · ${test.passed ? 'Passed' : 'Failed'}`, 'strong');
+        if (test.output) line(row, `Output: ${test.output}`, 'p');
+        if (test.error) line(row, `Error: ${test.error}`, 'p');
+        coding.append(row);
+      }
+      if (report.coding.source) {
+        const source = document.createElement('details'); source.className = 'report-source';
+        line(source, 'View submitted Python source', 'summary');
+        line(source, report.coding.source, 'pre'); coding.append(source);
+      }
+    }
+
+    if (report.communication) {
+      const speech = section(target, 'Automated speech metrics');
+      const metrics = document.createElement('div'); metrics.className = 'report-rating-grid';
+      for (const [label, value] of [['Speaking pace',`${report.communication.words_per_minute} words/min`],['Filler words',report.communication.filler_count],['Duration',`${report.communication.duration_seconds} sec`]]) {
+        const item = document.createElement('div'); item.className = 'report-rating'; line(item, label, 'span'); line(item, String(value), 'strong'); metrics.append(item);
+      }
+      speech.append(metrics);
+      if (report.communication.method) line(speech, report.communication.method, 'p').className = 'report-section-help';
+      (report.communication.suggestions || []).forEach(suggestion => line(speech, suggestion, 'p'));
+      if (report.communication.notice) line(speech, report.communication.notice, 'p').className = 'report-section-help';
+    }
+
+    if (report.resume) {
+      const resume = section(target, 'Automated resume checks');
+      const checks = document.createElement('ul'); checks.className = 'report-check-list';
+      for (const [name, passed] of Object.entries(report.resume.checks || {})) line(checks, `${passed ? '✓' : '•'} ${name.replaceAll('_', ' ')}`, 'li');
+      resume.append(checks);
+      if (report.resume.matched_terms?.length) line(resume, `Matched role terms: ${report.resume.matched_terms.join(', ')}`, 'p');
+      if (report.resume.missing_terms?.length) line(resume, `Missing role terms: ${report.resume.missing_terms.join(', ')}`, 'p');
+      if (report.resume.method) line(resume, report.resume.method, 'p').className = 'report-section-help';
+      (report.resume.suggestions || []).forEach(suggestion => line(resume, suggestion, 'p'));
+    }
+
+    if (report.questions?.length) {
+      const questions = section(target, 'Questions asked');
+      const list = document.createElement('ol'); list.className = 'report-next-list';
+      report.questions.forEach(question => line(list, question, 'li')); questions.append(list);
+    }
+
+    if (availableCount) {
+      const next = section(target, 'Suggested next steps');
+      const list = document.createElement('ul'); list.className = 'report-next-list';
+      (report.improvement_plan || []).forEach(step => line(list, step, 'li')); next.append(list);
+    }
+    if (report.scoring_method) {
+      const method = document.createElement('details'); method.className = 'report-method';
+      line(method, 'How the combined percentage is calculated', 'summary');
+      line(method, report.scoring_method, 'p'); target.append(method);
+    }
+    if (report.notice) line(target, report.notice, 'p').className = 'report-disclaimer';
+    const button = line(target, 'Download report (JSON)', 'button'); button.type = 'button'; button.className = 'secondary report-download';
     button.onclick = () => saveBlob(new Blob([JSON.stringify(report, null, 2)], {type:'application/json'}), `interviewace-${room.id}.json`);
     tab(roomTab);
   }
@@ -402,6 +591,7 @@ window.Peer = (() => {
   }
   function close() {
     clearTimeout(reconnect); clearTimeout(codeDebounce); room = null; connecting = false;
+    problemDraftActive = false; syncedProblemState = '';
     if (socket) { socket.onclose = null; socket.close(); } socket = null; stopMedia();
     if (mounted) {
       el('peerRoom').classList.add('hidden');
@@ -409,6 +599,7 @@ window.Peer = (() => {
       ['peerChat','peerDocuments','resumeAnalysis','ragDraft','peerReport'].forEach(id => el(id).replaceChildren());
       el('peerReport').classList.add('hidden'); el('codeResults').textContent = 'Execution results appear here for both participants.';
       el('peerCode').value = ''; el('audioStatus').textContent = '';
+      el('problemBank').value = 'sum'; updateProblemForm();
     }
   }
   async function uploadAudio(file) {
@@ -419,6 +610,7 @@ window.Peer = (() => {
     catch (e) { el('audioStatus').textContent = e.message; throw e; }
   }
   function bind() {
+    setupProblemBank();
     devices=DeviceMedia.create(el('localVideo'),el('mediaStatus'),deviceChanged);
     el('peerRoom').querySelectorAll('[data-room-tab]').forEach(button=>button.onclick=()=>tab(button.dataset.roomTab));
     el('openEditor').onclick=()=>tab('coding');
@@ -436,16 +628,17 @@ window.Peer = (() => {
     el('peerEnd').onclick = action(async () => { await request('/end'); await refresh(); });
     el('leaveRoom').onclick = () => close();
     el('sendQuestion').onsubmit = action(async () => { await request('/questions', {text:el('peerQuestion').value}); el('peerQuestion').value = ''; await refresh(); });
-    el('problemBank').onchange = () => {
-      if (el('problemBank').value === 'custom') return;
-      const reverse = el('problemBank').value === 'reverse';
-      el('problemTitle').value = reverse ? 'Reverse a string' : 'Sum two integers';
-      el('problemStatement').value = reverse ? 'Read a string from standard input and print it reversed.' : 'Read two integers from standard input and print their sum.';
-      el('problemConstraints').value = reverse ? '1–1000 characters' : '-1000000 ≤ a, b ≤ 1000000';
-      el('problemStarter').value = reverse ? 'text = input()\n# Print the reversed text' : 'a, b = map(int, input().split())\n# Print the sum';
-      el('problemTests').value = JSON.stringify(reverse ? [{input:'hello\n',expected:'olleh'},{input:'python\n',expected:'nohtyp'}] : [{input:'2 3\n',expected:'5'},{input:'-1 4\n',expected:'3'}], null, 2);
-    };
-    el('problemForm').onsubmit = action(async () => { await request('/problem', {title:el('problemTitle').value, statement:el('problemStatement').value, constraints:el('problemConstraints').value, starter:el('problemStarter').value, tests:JSON.parse(el('problemTests').value)}); await refresh(); });
+    el('problemForm').onsubmit = action(async () => {
+      let tests;
+      try { tests = JSON.parse(el('problemTests').value); }
+      catch { throw new Error('Tests must be valid JSON: use an array of objects with input and expected strings.'); }
+      if (!Array.isArray(tests) || tests.length < 1 || tests.length > 5 || tests.some(test => !test || typeof test.input !== 'string' || typeof test.expected !== 'string'))
+        throw new Error('Add between 1 and 5 test cases. Each needs string fields named input and expected.');
+      await request('/problem', {title:el('problemTitle').value, statement:el('problemStatement').value, constraints:el('problemConstraints').value, starter:el('problemStarter').value, tests});
+      problemDraftActive = false;
+      await refresh();
+    });
+    ['problemTitle','problemStatement','problemConstraints','problemStarter','problemTests'].forEach(id => el(id).addEventListener('input', () => { problemDraftActive = true; renderProblemPreview(); }));
     el('peerCode').oninput = () => { clearTimeout(codeDebounce); codeDebounce = setTimeout(() => { try { send({type:'code',source:el('peerCode').value}); } catch(e) { toast(e.message,true); } }, 400); };
     for (const [id, final] of [['runCode',false],['submitCode',true]]) el(id).onclick = action(async () => { el('codeResults').textContent = 'Running in the local sandbox…'; try { await request('/execute', {source:el('peerCode').value,final}); await refresh(); } catch(e) { el('codeResults').textContent = e.message; throw e; } });
     el('peerChatForm').onsubmit = action(async () => { send({type:'chat',text:el('peerMessage').value}); el('peerMessage').value = ''; });
