@@ -8,12 +8,23 @@ from uuid import uuid4
 IMAGE = os.getenv('RUNNER_IMAGE', 'interviewace-runner:local')
 
 
-def execute(source: str, tests: list[dict]) -> dict:
+LANGUAGES = {
+    'python': ('solution.py', ['python', '-I', '-B', '/work/solution.py']),
+    'javascript': ('solution.js', ['node', '/work/solution.js']),
+    'c': ('solution.c', ['sh', '-c', 'gcc /work/solution.c -O2 -o /tmp/solution && /tmp/solution']),
+    'cpp': ('solution.cpp', ['sh', '-c', 'g++ /work/solution.cpp -O2 -std=c++17 -o /tmp/solution && /tmp/solution']),
+}
+
+
+def execute(source: str, tests: list[dict], language: str = 'python') -> dict:
     if os.getenv('ENABLE_CODE_EXECUTION', 'true').lower() != 'true':
         raise RuntimeError('Code execution is disabled in this deployment.')
+    if language not in LANGUAGES:
+        raise ValueError('Unsupported code language.')
+    filename, runtime = LANGUAGES[language]
     results = []
     with tempfile.TemporaryDirectory(prefix='interviewace-code-') as directory:
-        Path(directory, 'solution.py').write_text(source, encoding='utf-8')
+        Path(directory, filename).write_text(source, encoding='utf-8')
         for case in tests:
             name = 'ia-' + uuid4().hex
             command = ['docker', 'run', '--rm', '--pull=never', '--name', name,
@@ -21,9 +32,9 @@ def execute(source: str, tests: list[dict]) -> dict:
                        '--cpus=0.5', '--pids-limit=32', '--cap-drop=ALL',
                        '--security-opt=no-new-privileges', '--user=65534:65534',
                        '--ulimit', 'cpu=2:2', '--ulimit', 'fsize=65536:65536',
-                       '--tmpfs', '/tmp:rw,noexec,nosuid,size=8m', '--log-driver=none',
+                       '--tmpfs', '/tmp:rw,nosuid,size=8m', '--log-driver=none',
                        '--mount', f'type=bind,source={directory},target=/work,readonly',
-                       '-i', IMAGE, 'python', '-I', '-B', '/work/solution.py']
+                       '-i', IMAGE, *runtime]
             try:
                 # Files rather than PIPE prevent unbounded output consuming API memory.
                 with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
