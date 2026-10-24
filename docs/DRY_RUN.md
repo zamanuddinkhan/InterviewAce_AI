@@ -26,7 +26,7 @@ Theme/navigation/history checks and the account browser flow passed again. Heade
 
 - Logged-in Home stays available, including after refresh. AI Practice, Peer Rooms, History and Profile are separate views.
 - Room creation/join cards disappear while working inside a room; the header separates title/role, a numeric timer, code and actions. Full invitation URLs are collapsed by default.
-- The Python editor has a dedicated tab and shortcut. It is visible before start with an explanation of permissions. The interviewer sees read-only code; only the candidate can run/submit after start and problem assignment.
+- The multi-language editor has a dedicated tab and shortcut. It supports Python, JavaScript, C, and C++, is visible before start with an explanation of permissions, and lets the candidate select the language. The interviewer sees read-only code; only the candidate can run/submit after start and problem assignment.
 - Camera/microphone preview works while waiting. WebRTC signaling can connect before the timer starts. Missing-camera and blocked-permission cases have actionable messages and an independent microphone fallback.
 - Registration help now says only “Your contact number stays private.” The international format validation remains unchanged.
 - AI Practice includes an animated coach illustration, local read-aloud where available, optional camera preview and consented local recorded-answer transcription. It does not claim to supply a real human video stream.
