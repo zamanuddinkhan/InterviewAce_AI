@@ -270,7 +270,8 @@ window.Peer = (() => {
     const id = room.id;
     try {
       const auth = {authenticate:true};
-      const backendOrigin = window.INTERVIEWACE_BACKEND_WS_ORIGIN || '';
+      const isLocalHost = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(location.hostname);
+      const backendOrigin = isLocalHost ? '' : (window.INTERVIEWACE_BACKEND_WS_ORIGIN || '');
       let address;
       if (backendOrigin) {
         const issued = await api(`/rooms/${id}/ws-ticket`, {method:'POST'});
