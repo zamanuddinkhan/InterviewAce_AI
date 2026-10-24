@@ -10,20 +10,104 @@ The backend and processing tools are Python; the API is FastAPI; persistent appl
 
 ```mermaid
 flowchart LR
-    B[HTML CSS JavaScript browser] -->|HTTPS REST and HttpOnly cookie| A[FastAPI]
-    B <-->|WebSocket events and signaling| A
-    B <-->|Direct WebRTC| P[Peer browser]
-    A --> M[(MySQL)]
-    A --> F[Private shared-file storage]
-    A --> L[Ollama local models]
-    A --> W[Faster-Whisper CPU]
-    A --> D[Restricted Docker Python runner]
-    O[Host backup tool] --> M
-    O --> F
-    O --> Z[SQL and files archive with checksums]
+    subgraph Clients[User devices]
+        Browser[Browser UI<br/>HTML · CSS · vanilla JavaScript]
+        Peer[Other interview participant's browser]
+    end
+
+    subgraph Delivery[Frontend delivery]
+        Local[Local FastAPI static-file serving]
+        Vercel[Vercel static frontend<br/>frontend/]
+        Funnel[Tailscale Funnel<br/>public HTTPS tunnel]
+    end
+
+    subgraph Host[Owner or operator's application host]
+        API[FastAPI · one Uvicorn worker<br/>auth · validation · authorization · APIs]
+        WS[Room WebSocket manager<br/>in-process connections and tickets]
+        SQL[(MySQL<br/>accounts · sessions · interviews · rooms · events · results)]
+        Disk[(Private project data folder<br/>uploads · Chroma index · local caches · logs · backups)]
+        AI[Ollama<br/>Qwen chat · Nomic embeddings]
+        Graph[LangChain · LangGraph<br/>retrieval · adaptive solo practice]
+        Whisper[Optional Faster-Whisper<br/>local CPU transcription]
+        Runner[Docker CLI<br/>restricted, disposable Python containers]
+    end
+
+    Browser -->|Local HTTP / API| Local
+    Local --> API
+    Browser -->|Production static page| Vercel
+    Browser -->|Same-origin HTTPS REST /api| Vercel
+    Vercel -->|HTTPS /api rewrite| Funnel
+    Funnel --> API
+    Browser <-->|WSS via Funnel · room-scoped, one-use ticket| WS
+    API --- WS
+    API --> SQL
+    API --> Disk
+    API --> Graph
+    Graph --> AI
+    API --> Whisper
+    API --> Runner
+    Browser <-->|Direct WebRTC media| Peer
+    WS <-->|Authenticated signaling only| Peer
+
+    Backup[Operator backup command] --> SQL
+    Backup --> Disk
+    Backup --> Archive[Verified SQL and file archive]
 ```
 
-MySQL owns account/session records, room roles, deadlines, events, documents and results. WebSocket connections and throttling counters live in the single API process. Uploaded files remain under `data/resumes`, never public static storage. Peer RAG extracts PDF pages, DOCX text, PPTX slides and user-supplied image captions with local Python libraries; embeddings are computed per request and kept separate from the optional solo Chroma knowledge index. Image files are shared in their original format, with a caption used as searchable text; OCR is not included.
+### Runtime topology
+
+The application has two supported front-end paths. In local development, FastAPI serves the static files from `frontend/` and the browser calls the same host's `/api` endpoints. In the current public/demo setup, Vercel serves the static `frontend/` directory and rewrites `/api/*` over HTTPS through Tailscale Funnel to FastAPI on the Windows PC. The Vercel deployment does not host Python, MySQL, models, uploads, or Docker. Its deployment configuration and backend-origin script are in `frontend/vercel.json`, `frontend/deploy-config.js`, and `deploy/`.
+
+The FastAPI application is a single process with one Uvicorn worker. Authentication, request validation, room authorization, REST routes, static serving, security headers, throttling, timer tasks, and WebSocket handling live in this application. Room sockets, WebSocket tickets, and rate-limit buckets are process-local; adding workers or replicas without shared coordination would break assumptions about room delivery and counters. Production browser API requests use an HttpOnly session cookie. For the cross-origin production WebSocket, the browser first obtains a room-scoped ticket through the same-origin `/api` rewrite. The ticket is single-use and expires after 45 seconds; the login token is not placed in the WebSocket URL or exposed to JavaScript.
+
+WebSockets carry room chat, timer updates, interviewer questions, shared code/results, and WebRTC signaling. They do not carry the camera/microphone stream. WebRTC sends media directly between the two browsers. This build does not include a TURN relay, so firewall/NAT combinations can prevent calls even when room chat works.
+
+### Data, AI, and execution boundaries
+
+MySQL is the durable source for user accounts, password/session metadata, solo interviews/questions/answers, peer room membership and state, room events, document metadata, resume analysis, feedback, and reports. SQLAlchemy models and the connection setup are in `backend/app/models.py` and `backend/app/db.py`. Passwords are stored as Argon2 hashes; only a digest of each browser session token is persisted.
+
+The `data/` directory holds private uploaded files and local runtime state such as the optional Chroma knowledge collection, Docker CLI configuration, Hugging Face model caches, logs, and generated backups. Relative cache paths are resolved against the checkout root, so moving the project does not keep old absolute cache paths. Uploaded resumes and shared room documents are served only through authenticated APIs; they are not placed in Vercel's public static directory. Backups are explicit operator actions and are separate copies with their own retention policy.
+
+Ollama provides the configured local Qwen chat model and Nomic embedding model. LangChain connects model calls and retrieval; LangGraph manages solo interview question/evaluation transitions. Peer document retrieval extracts supported text locally, embeds and ranks passages for that request, and asks Ollama for a private draft. The optional solo Chroma index is built from curated `knowledge/` notes by `python -m backend.ingest`; private peer documents are not added to that shared index. Faster-Whisper is an optional local CPU service for consented speech analysis. The browser's installed local speech voices are used for read-aloud; there is no remote speech API in that feature.
+
+Candidate Python submissions are passed by the API to the Docker CLI and run in a disposable, network-disabled container with resource limits. The host never evaluates submitted Python as a fallback. The Docker daemon remains a privileged host service and must not be exposed to the public internet. `.env` holds private database credentials and signing keys and must not be committed or uploaded to Vercel; Vercel's public files contain the public backend hostname only.
+
+### Main source areas
+
+| Area | Main files | Responsibility |
+| --- | --- | --- |
+| Browser application | `frontend/index.html`, `app.js`, `peer.html`, `peer.js`, `solo.js`, `media.js` | Public shell, account/profile flows, dashboards, solo practice, peer-room UI, report rendering, browser media and API calls |
+| Browser styling and deployment | `frontend/base.css`, `style.css`, `rooms.css`, `studio.css`, `theme.js`, `chrome.css`, `vercel.json`, `deploy-config.js` | Responsive/theme styles, shared chrome, static Vercel routing and production WebSocket origin |
+| API and lifecycle | `backend/app/main.py`, `peer.py`, `operations.py` | FastAPI lifecycle, account/solo endpoints, peer-room endpoints/WebSockets, headers, safe errors, rate limits and request metrics |
+| Identity and persistence | `backend/app/security.py`, `validation.py`, `schema.py`, `config.py`, `db.py`, `models.py` | Password/session security, input rules, additive migrations, environment configuration, SQLAlchemy and MySQL schema |
+| AI, analysis, and runner | `backend/app/ai.py`, `graph.py`, `rag.py`, `analysis.py`, `runner.py`, `backend/ingest.py`, `sandbox/` | Ollama calls, LangGraph practice, retrieval, resume/speech estimates, Docker execution and local knowledge indexing |
+| Installation and operations | `run.cmd`, `run.ps1`, `backend/launch.py`, `backend/local_mysql.py`, `backend/backup.py`, `deploy/`, `compose.yaml` | Local startup, optional managed MySQL, backup/restore, and reviewable deployment templates |
+| Verification and docs | `backend/verify_*.py`, `tests/`, `backend/document.py`, `docs/` | Browser/live integration checks, automated tests, generated API/schema docs and operating guides |
+
+The following sequence summarizes the data path for the main workflows:
+
+```mermaid
+sequenceDiagram
+    participant U as Browser user
+    participant F as Vercel or local static frontend
+    participant A as FastAPI
+    participant DB as MySQL
+    participant M as Local AI or Docker service
+
+    U->>F: Load UI and submit an action
+    F->>A: /api request with session cookie
+    A->>A: Validate input, session, origin and role
+    A->>DB: Read/write owned interview or room data
+    opt AI or code action
+        A->>M: Local model request or isolated Python test
+        M-->>A: Draft/evaluation or bounded execution result
+        A->>DB: Persist permitted result/event
+    end
+    A-->>F: JSON response
+    F-->>U: Render result and next action
+```
+
+The deployed Vercel/Funnel path depends on the PC being awake, connected, and running MySQL and the backend. Starting/stopping it and verifying its public route are covered in [Vercel + PC backend](VERCEL_PC_BACKEND.md); local installation and recovery are in [Operations](OPERATIONS.md).
 
 ## 3. Registration and profile data
 
@@ -96,7 +180,9 @@ Camera and microphone are requested separately so a missing/blocked camera does 
 
 ## 7. Python coding system
 
-The interviewer selects a bundled sum/reverse problem or creates a custom statement, constraints, starter script and 1–5 input/expected-output cases. The execution contract is a Python script reading standard input and printing standard output. The native textarea follows the requested frontend stack; Monaco, C++ and collaborative editing are excluded.
+The interviewer selects one of 12 built-in problems or creates a custom one. The built-in bank covers sum of two integers, string reversal, palindrome check, factorial, maximum of three numbers, vowel counting, Fibonacci, prime check, ordered de-duplication, second-largest distinct value, binary search, and FizzBuzz. The selected challenge pre-fills its title, statement, constraints, starter Python code, and two input/expected-output examples. The interviewer can edit a built-in challenge before assigning it. Selecting a custom problem opens blank fields with prompts and shows a live preview; a custom problem requires a title, statement, and 1–5 JSON test cases. The workspace preview makes clear that the candidate receives the challenge only after the interviewer clicks Assign/Send.
+
+The execution contract is a Python script reading standard input and printing standard output. The native textarea follows the requested frontend stack; Monaco, C++ and collaborative editing are excluded.
 
 The editor is reachable through the Coding editor tab and Open coding editor button, including while waiting. The UI explains read-only interviewer access and when candidate controls unlock. Run/Submit require an active session and an assigned problem. Solo AI practice is answer-based; peer coding is a separate mode.
 
@@ -138,7 +224,9 @@ When the camera is off, its preview shows the first letter of the signed-in firs
 
 After starting a solo interview, users may consent to record an answer (two-minute client limit). `/api/interviews/{id}/transcribe` validates ownership, consent, active status, audio extension and the 15 MB upload limit, then runs local Whisper. It returns a transcript draft plus metrics. The raw upload is deleted in a finally block; the draft is not saved as an answer until the user reviews and submits the text. Leaving the view, switching interviews or submitting cancels/invalidates pending recording results. Physical sound playback still depends on local voices, browser settings and hardware.
 
-Completed peer reports combine final code results (40%), human technical/problem-solving mean (30%), automated speech (20%) and resume quality (10%). Missing components remain null/unavailable. Available weights are renormalized; absent data is never silently scored zero. Human communication ratings are shown separately.
+Completed peer reports combine final code results (40%), the mean of human technical-knowledge and problem-solving ratings (30%), automated speech metrics (20%) and resume-rule analysis (10%). A coding score is the final submitted solution's passed tests divided by its total tests; trial runs do not supply this score. The speech score comes from a candidate-consented recording/upload, and the resume score requires an uploaded candidate resume. The interviewer submits final human feedback after the session ends.
+
+Each component shows its score as a percentage or “Not assessed,” its base weight, and—when present—its proportionally normalized share of the current total plus points contributed. The calculation is `sum(score × base_weight) / sum(base_weight for assessed components)`. For example, if coding is the only assessed category, its normalized weight is 100% and the combined score equals its coding percentage; if no category has evidence, the total stays pending. Missing components remain null/unavailable and are never silently scored zero. The report tells users how to complete each missing category, shows the supporting code results/source, human ratings/comments, available speech/resume findings, questions, next steps, and a JSON download. The human communication rating remains visible for context but is not substituted for consented automated speech metrics. Human and automated evidence are labeled separately.
 
 Reports include duration/status, topic, sent questions, final source/test results, human strengths/improvements, available automated findings, next steps and a JSON download. Scores in history use retained completed reports. Scores are study feedback, not hiring assessments. Deleted source records are not secretly retained in a second report snapshot.
 
