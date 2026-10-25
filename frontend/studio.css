@@ -239,3 +239,20 @@
   .peer-layout > .room-tabs button { flex:0 0 auto; white-space:nowrap; }
 }
 #peerRoom .room-heading:has(> #roomOverview.hidden) { display:none; }
+/* Keep each navigation bar inside the section it controls. */
+.peer-layout[data-tab="live"] { grid-template-areas:"main conversation video"; }
+.peer-layout[data-tab="coding"],.peer-layout[data-tab="resources"],.peer-layout[data-tab="feedback"] { grid-template-areas:"main video"; }
+#peerRoom .room-heading > .room-tabs { display:flex; margin:18px 0 0; padding:14px 0 0; border:0; border-top:1px solid var(--line); border-radius:0; background:transparent; }
+#roomMainColumn > .problem-assignment > .room-tabs,#codingPanel > .room-tabs,#roomMainColumn > [data-room-panel="resources"] > .room-tabs,#feedbackPanel > .room-tabs,#peerReport > .room-tabs,#candidateFeedbackPending > .room-tabs { display:flex; margin:0 0 18px; padding:0 0 13px; border:0; border-bottom:1px solid var(--line); border-radius:0; background:transparent; }
+@media(max-width:1100px) {
+ .peer-layout[data-tab="live"] { grid-template-areas:"main video" "conversation conversation"; }
+ .peer-layout[data-tab="coding"],.peer-layout[data-tab="resources"],.peer-layout[data-tab="feedback"] { grid-template-areas:"main" "video"; }
+}
+@media(max-width:760px) {
+ .peer-layout[data-tab="live"] { grid-template-areas:"video" "main" "conversation"; }
+ .peer-layout[data-tab="coding"],.peer-layout[data-tab="resources"],.peer-layout[data-tab="feedback"] { grid-template-areas:"main" "video"; }
+ #peerRoom .room-heading > .room-tabs { gap:3px; flex-wrap:nowrap; overflow-x:auto; }
+ #peerRoom .room-heading > .room-tabs button { flex:0 0 auto; white-space:nowrap; padding:10px 12px; }
+ #roomMainColumn > .problem-assignment > .room-tabs,#codingPanel > .room-tabs,#roomMainColumn > [data-room-panel="resources"] > .room-tabs,#feedbackPanel > .room-tabs,#peerReport > .room-tabs,#candidateFeedbackPending > .room-tabs { gap:3px; flex-wrap:nowrap; overflow-x:auto; }
+ #roomMainColumn > .problem-assignment > .room-tabs button,#codingPanel > .room-tabs button,#roomMainColumn > [data-room-panel="resources"] > .room-tabs button,#feedbackPanel > .room-tabs button,#peerReport > .room-tabs button,#candidateFeedbackPending > .room-tabs button { flex:0 0 auto; white-space:nowrap; padding:10px 12px; }
+}

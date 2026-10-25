@@ -108,7 +108,7 @@ window.Peer = (() => {
   async function show() {
     if (!mounted) {
       if (!mounting) mounting = (async () => {
-      const markup = await fetch('/assets/peer.html?v=3.5.2').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
+      const markup = await fetch('/assets/peer.html?v=3.5.4').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
       const wrapper = document.createElement('div'); wrapper.id = 'peerWorkspace'; wrapper.innerHTML = markup;
       const solo = document.createElement('section'); solo.className = 'solo-studio'; solo.id='soloStudio';
       while (el('workspace').firstChild) solo.append(el('workspace').firstChild);
@@ -129,15 +129,15 @@ window.Peer = (() => {
     for(const [id,target] of [['soloStudio','solo'],['peerWorkspace','peer'],['peerHistoryPanel','history'],['profilePanel','profile']])el(id).classList.toggle('hidden',view!==target);
   }
   function tab(name) {
-    roomTab=name;
-    el('roomOverview').classList.toggle('hidden',name!=='live');
-    el('peerRoom').querySelectorAll('[data-room-panel]').forEach(panel=>{
-      const roleAllowed=!panel.classList.contains('interviewer-only') || room?.role==='interviewer';
-      const candidateAllowed=!panel.classList.contains('candidate-only') || room?.role==='candidate';
-      panel.classList.toggle('hidden',panel.dataset.roomPanel!==name || !roleAllowed || !candidateAllowed || (panel.id==='peerReport' && room?.status!=='completed'));
-    });
-    el('peerRoom').querySelector('.peer-layout').dataset.tab=name;
-    el('peerRoom').querySelectorAll('[data-room-tab]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.roomTab===name)));
+    roomTab=name;el('roomOverview').classList.toggle('hidden',name!=='live');
+    const workspace=el('peerRoom'),tabs=workspace.querySelector('.room-tabs');let destination;
+    if(name==='live')destination=el('roomHeading');
+    else if(name==='coding')destination=room?.role==='interviewer'?workspace.querySelector('.problem-assignment'):el('codingPanel');
+    else if(name==='resources')destination=workspace.querySelector('[data-room-panel="resources"]');
+    else destination=room?.role==='interviewer'?el('feedbackPanel'):room?.status==='completed'?el('peerReport'):el('candidateFeedbackPending');
+    if(destination){if(name==='live')destination.append(tabs);else destination.prepend(tabs);}
+    workspace.querySelectorAll('[data-room-panel]').forEach(panel=>{const roleAllowed=!panel.classList.contains('interviewer-only')||room?.role==='interviewer';const candidateAllowed=!panel.classList.contains('candidate-only')||room?.role==='candidate';panel.classList.toggle('hidden',panel.dataset.roomPanel!==name||!roleAllowed||!candidateAllowed||(panel.id==='peerReport'&&room?.status!=='completed'));});
+    workspace.querySelector('.peer-layout').dataset.tab=name;workspace.querySelectorAll('[data-room-tab]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.roomTab===name)));
   }
   function controls() {
     if(!room)return;
@@ -374,6 +374,7 @@ window.Peer = (() => {
     const percent = value => `${Number(value).toFixed(1).replace(/\.0$/, '')}%`;
     const section = (parent, title) => { const node = document.createElement('section'); node.className = 'report-block'; line(node, title, 'h3'); parent.append(node); return node; };
 
+    if(room.role==='candidate'&&roomTab==='feedback')target.append(el('peerRoom').querySelector('.room-tabs'));
     const intro = document.createElement('div'); intro.className = 'report-heading';
     const titleGroup = document.createElement('div'); line(titleGroup, 'INTERVIEW SUMMARY', 'span').className = 'eyebrow';
     line(titleGroup, 'Feedback & report', 'h2');
@@ -652,7 +653,7 @@ window.Peer = (() => {
   }
   function close() {
     clearTimeout(reconnect); clearTimeout(codeDebounce); room = null; connecting = false;
-    problemDraftActive = false; syncedProblemState = '';
+    problemDraftActive=false;syncedProblemState='';roomTab='live';
     if (socket) { socket.onclose = null; socket.close(); } socket = null; stopMedia();
     if (mounted) {
       el('peerRoom').classList.add('hidden');
