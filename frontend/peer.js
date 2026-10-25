@@ -512,7 +512,14 @@ window.Peer = (() => {
       button.disabled = true;
       try {
         const response = await fetch(`/api/rooms/${room.id}/report.pdf`, {credentials:'same-origin', headers:{'X-Requested-With':'InterviewAce'}});
-        if (!response.ok) throw new Error('Feedback report could not be downloaded.');
+        if (!response.ok) {
+          let detail = '';
+          try {
+            const body = await response.json();
+            detail = Array.isArray(body.detail) ? body.detail.map(error => error.msg).join('; ') : body.detail;
+          } catch {}
+          throw new Error(detail || `Feedback report download failed (HTTP ${response.status}).`);
+        }
         saveBlob(await response.blob(), `interviewace-feedback-${room.id}.pdf`);
       } catch (error) { toast(error.message, true); }
       finally { button.disabled = false; }
