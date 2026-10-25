@@ -489,7 +489,7 @@ Validation limits are included below. Registration also enforces the shared pass
 | Field | Required | Type / limits |
 | --- | --- | --- |
 | `topic` | True | `{'type': 'string', 'maxLength': 100, 'minLength': 3}` |
-| `duration_seconds` | False | `{'type': 'integer', 'maximum': 900.0, 'minimum': 60.0}` |
+| `duration_seconds` | False | `{'type': 'integer', 'maximum': 14400.0, 'minimum': 60.0}` (1–240 minutes) |
 
 ## FeedbackBody
 
