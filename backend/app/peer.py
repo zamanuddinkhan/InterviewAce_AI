@@ -137,7 +137,7 @@ def deletion_state(db: Session, room_ids: list[str]):
     latest = {}
     for action in actions:
         latest[action.room_id] = action
-    return {room_id: action.payload.get('undo_until')
+    return {room_id: {'undo_until': action.payload.get('undo_until'), 'requested_by': action.user_id}
             for room_id, action in latest.items() if action.kind == 'delete_scheduled'}
 
 
@@ -200,11 +200,11 @@ def history(user: User = Depends(current_user), db: Session = Depends(get_db)):
     pending = deletion_state(db, [room.id for room in rooms])
     result = []
     for room in rooms:
-        until = pending.get(room.id)
-        if until and room.interviewer_id != user.id:
-            continue
+        deletion = pending.get(room.id)
         row = snapshot(db, room, user)
-        row['delete_after'] = until
+        row['delete_after'] = (deletion['undo_until']
+                               if deletion and deletion['requested_by'] == user.id else None)
+        row['deletion_pending'] = bool(deletion)
         result.append(row)
     return result
 
@@ -667,12 +667,11 @@ def report_pdf(room_id: str, user: User = Depends(current_user), db: Session = D
 
 @router.post('/{room_id}/undo-delete')
 async def undo_delete(room_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    room = db.get(PeerRoom, room_id)
-    if not room or room.interviewer_id != user.id:
+    room = access(db, room_id, user)
+    deletion = deletion_state(db, [room_id]).get(room_id)
+    if not deletion or deletion['requested_by'] != user.id:
         raise HTTPException(404, 'Room not found.')
-    undo_until = deletion_state(db, [room_id]).get(room_id)
-    if undo_until is None:
-        raise HTTPException(409, 'This room is no longer waiting to be deleted.')
+    undo_until = deletion['undo_until']
     if time.time() >= float(undo_until):
         raise HTTPException(409, 'The five-second undo window has expired.')
     event(db, room, user, 'delete_undone', {'restored': True})
@@ -682,9 +681,11 @@ async def undo_delete(room_id: str, user: User = Depends(current_user), db: Sess
 
 @router.delete('/{room_id}')
 async def delete_room(room_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    room = access(db, room_id, user, 'interviewer')
+    room = access(db, room_id, user)
     if room.status == 'active':
         raise HTTPException(409, 'End the interview before deleting it.')
+    if deletion_state(db, [room_id]).get(room_id):
+        raise HTTPException(409, 'This interview is already being deleted.')
     undo_until = time.time() + 5
     event(db, room, user, 'delete_scheduled', {'undo_until': undo_until})
     await broadcast(room_id, {'type': 'deleted'})
