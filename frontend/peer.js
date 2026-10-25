@@ -58,6 +58,13 @@ window.Peer = (() => {
     try { await fn(event); } catch (error) { toast(error.message, true); }
     finally { if (button) button.disabled = false; if (room) controls(); }
   };
+  function formatDuration(seconds) {
+    const total = Math.max(0, Math.floor(Number(seconds) || 0));
+    const hours = Math.floor(total / 3600), minutes = Math.floor((total % 3600) / 60), remainder = total % 60;
+    return hours
+      ? `${hours}:${String(minutes).padStart(2,'0')}:${String(remainder).padStart(2,'0')}`
+      : `${String(minutes).padStart(2,'0')}:${String(remainder).padStart(2,'0')}`;
+  }
   const request = (path, body, method = 'POST') => api('/rooms/' + room.id + path,
     {method, ...(body === undefined ? {} : {body: JSON.stringify(body)})});
   const send = data => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(data)); else throw new Error('Room connection is offline. Reconnect before continuing.'); };
@@ -120,7 +127,7 @@ window.Peer = (() => {
   async function show() {
     if (!mounted) {
       if (!mounting) mounting = (async () => {
-      const markup = await fetch('/assets/peer.html?v=3.3.8').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
+      const markup = await fetch('/assets/peer.html?v=3.4.0').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
       const wrapper = document.createElement('div'); wrapper.id = 'peerWorkspace'; wrapper.innerHTML = markup;
       const solo = document.createElement('section'); solo.className = 'solo-studio'; solo.id='soloStudio';
       while (el('workspace').firstChild) solo.append(el('workspace').firstChild);
@@ -291,9 +298,11 @@ window.Peer = (() => {
     el('peerIdentity').textContent=`You are the ${room.role}. ${statusText}.`;
     el('peerRoomCode').textContent=`Room code: ${room.id}`;
     el('timerLabel').textContent=room.status==='active'?'Time remaining':room.status==='completed'?'Session ended':'Session duration';
-    if(room.status!=='active')el('peerTimer').textContent=room.status==='completed'?'00:00':`${Math.floor(room.duration_seconds/60)}:${String(room.duration_seconds%60).padStart(2,'0')}`;
+    if(room.status!=='active')el('peerTimer').textContent=room.status==='completed'?'00:00':formatDuration(room.duration_seconds);
     el('roomHelp').textContent=room.status==='waiting'?'Test your camera and microphone now. The timer starts only after the interviewer starts the session.':room.status==='active'?'Use the tabs to switch between the call, coding, documents and feedback.':'Review your report and final feedback below.';
-    el('inviteLink').textContent = `${location.origin}/?room=${room.id}`;
+    const inviteUrl = `${location.origin}/?room=${room.id}`;
+    el('inviteLink').href = inviteUrl;
+    el('inviteLink').textContent = inviteUrl;
     el('peerRoom').querySelectorAll('.interviewer-only').forEach(e => e.classList.toggle('hidden', !interviewer));
     el('peerRoom').querySelectorAll('.candidate-only').forEach(e => e.classList.toggle('hidden', interviewer));
     el('peerStart').classList.toggle('hidden', !interviewer || room.status !== 'waiting');
@@ -553,7 +562,7 @@ window.Peer = (() => {
       if (message.type === 'refresh') await refresh();
       else if (message.type === 'timer') {
         const seconds = message.remaining_seconds;
-        if(message.status==='active')el('peerTimer').textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
+        if(message.status==='active')el('peerTimer').textContent=formatDuration(seconds);
         el('peerTimer').classList.toggle('low', message.status === 'active' && seconds <= 60);
         if (room.status !== message.status) await refresh();
       } else if (message.type === 'code' && room.role === 'interviewer') {
