@@ -40,7 +40,7 @@ WS_TICKET_SECONDS = 45
 
 class CreateRoom(BaseModel):
     topic: str = Field(min_length=3, max_length=100)
-    duration_seconds: int = Field(default=900, ge=60, le=900)
+    duration_seconds: int = Field(default=900, ge=60, le=14400)
 
 class TextBody(BaseModel):
     text: str = Field(min_length=2, max_length=5000)
