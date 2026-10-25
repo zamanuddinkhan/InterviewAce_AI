@@ -36,7 +36,10 @@ def room_pair():
 
 def test_roles_two_person_limit_and_duration_validation():
     room_id, interviewer, candidate = room_pair(); stranger, _ = account()
-    assert client.post('/api/rooms', headers=interviewer, json={'topic': 'Python', 'duration_seconds': 901}).status_code == 422
+    accepted = client.post('/api/rooms', headers=interviewer, json={'topic': 'Python', 'duration_seconds': 14400})
+    assert accepted.status_code == 201
+    assert accepted.json()['duration_seconds'] == 14400
+    assert client.post('/api/rooms', headers=interviewer, json={'topic': 'Python', 'duration_seconds': 14401}).status_code == 422
     assert client.post(f'/api/rooms/{room_id}/join', headers=stranger).status_code == 409
     assert client.get(f'/api/rooms/{room_id}', headers=stranger).status_code == 404
     assert client.post(f'/api/rooms/{room_id}/start', headers=candidate).status_code == 403
@@ -44,6 +47,21 @@ def test_roles_two_person_limit_and_duration_validation():
     assert client.post(f'/api/rooms/{room_id}/questions', headers=candidate, json={'text': 'Spoof question'}).status_code == 403
     assert client.post(f'/api/rooms/{room_id}/execute', headers=interviewer, json={'source': 'print(1)'}).status_code == 403
     assert client.get(f'/api/rooms/{room_id}/report', headers=candidate).status_code == 409
+
+
+def test_either_participant_can_delete_and_undo_a_non_active_room():
+    room_id, interviewer, candidate = room_pair()
+    deleted = client.delete(f'/api/rooms/{room_id}', headers=candidate)
+    assert deleted.status_code == 200
+    candidate_row = next(row for row in client.get('/api/rooms', headers=candidate).json() if row['id'] == room_id)
+    interviewer_row = next(row for row in client.get('/api/rooms', headers=interviewer).json() if row['id'] == room_id)
+    assert candidate_row['delete_after'] == deleted.json()['undo_until']
+    assert candidate_row['deletion_pending'] is True
+    assert interviewer_row['delete_after'] is None
+    assert interviewer_row['deletion_pending'] is True
+    assert client.post(f'/api/rooms/{room_id}/undo-delete', headers=interviewer).status_code == 404
+    assert client.post(f'/api/rooms/{room_id}/undo-delete', headers=candidate).status_code == 200
+    assert all(not row['deletion_pending'] for row in client.get('/api/rooms', headers=candidate).json())
 
 
 def test_backend_expiry_blocks_writes_and_report_keeps_missing_scores():
