@@ -4,7 +4,7 @@ import time
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from pypdf import PdfWriter
+from pypdf import PdfReader, PdfWriter
 from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
 import pytest
 
@@ -109,6 +109,10 @@ def test_feedback_report_download_is_a_pdf():
     assert response.headers['content-type'].startswith('application/pdf')
     assert response.content.startswith(b'%PDF-1.4')
     assert 'interviewace-feedback-' in response.headers['content-disposition']
+    extracted = '\n'.join(page.extract_text() or '' for page in PdfReader(io.BytesIO(response.content)).pages)
+    assert 'InterviewAce Feedback Report' in extracted
+    assert 'Topic: Python Backend Developer' in extracted
+    assert 'Score breakdown:' in extracted
 
 
 def test_visible_and_hidden_tests_are_selected_and_hidden_data_is_redacted(monkeypatch):

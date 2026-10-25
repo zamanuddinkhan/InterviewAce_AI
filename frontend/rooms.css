@@ -96,6 +96,11 @@
   color:#e2e8f0!important
 }
 
+.code-editor-shell { display:grid; grid-template-columns:3.5rem minmax(0,1fr); min-width:0; min-height:340px; overflow:hidden; border:1px solid #30435c; border-radius:12px; background:#102238; }
+.code-editor-shell:focus-within { outline:3px solid #dae7ff; outline-offset:1px; }
+.code-line-numbers { box-sizing:border-box; min-height:340px; margin:0; padding:14px 10px 14px 0; overflow:hidden; border-right:1px solid #30435c; background:#0c1b2c; color:#8da1bc; text-align:right; user-select:none; white-space:pre; font:13px/1.6 Consolas,"Courier New",monospace; }
+.code-editor-shell .code-editor { box-sizing:border-box; width:100%; min-width:0; min-height:340px; height:340px; margin:0; padding:14px; resize:vertical; overflow:auto; border:0; border-radius:0; outline:0; box-shadow:none!important; white-space:pre; font:13px/1.6 Consolas,"Courier New",monospace!important; }
+
 .output,pre {
   white-space:pre-wrap;
   overflow-wrap:anywhere;
@@ -110,6 +115,21 @@
   padding:14px;
   border-radius:8px
 }
+
+.execution-results { display:grid; gap:10px; white-space:normal; }
+.execution-case { min-width:0; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
+.execution-case.is-passed { border-color:var(--feedback-border); }
+.execution-case.is-failed { border-color:var(--danger-text); }
+.execution-case.is-not-run { border-color:var(--field-border); }
+.execution-case-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.execution-case-heading strong { color:var(--ink); }
+.execution-case-heading span { padding:4px 9px; border-radius:999px; background:var(--surface-accent); color:var(--accent-text); font-size:11px; font-weight:700; text-transform:capitalize; }
+.is-passed .execution-case-heading span { color:var(--green); }
+.is-failed .execution-case-heading span { color:var(--danger-text); }
+.execution-detail { margin:8px 0 0; color:var(--muted); white-space:pre-wrap; overflow-wrap:anywhere; font:12px/1.55 Consolas,"Courier New",monospace; }
+.execution-error { color:var(--danger-text); }
+.execution-notice { margin:0; padding:11px 13px; border:1px solid var(--field-border); border-radius:9px; background:var(--surface-accent); color:var(--label-text); line-height:1.5; }
+.execution-summary { padding-top:4px; }
 
 .prewrap {
   white-space:pre-wrap

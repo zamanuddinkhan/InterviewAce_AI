@@ -50,6 +50,12 @@ def execute(source: str, tests: list[dict], language: str = 'python') -> dict:
                     output.seek(0); errors.seek(0)
                     stdout = output.read(16000).decode(errors='replace')
                     stderr = errors.read(8000).decode(errors='replace')
+                docker_error = (stdout + '\n' + stderr).lower()
+                if any(marker in docker_error for marker in (
+                    'failed to connect to the docker api', 'dockerdesktoplinuxengine',
+                    'cannot connect to the docker daemon', 'is the docker daemon running',
+                )):
+                    raise RuntimeError('The code runner is unavailable. Start Docker Desktop, then run the tests again.')
                 if process.returncode == 125:
                     raise RuntimeError('Code sandbox unavailable. Build the runner image and start Docker.')
                 passed = process.returncode == 0 and stdout.strip() == case['expected'].strip()

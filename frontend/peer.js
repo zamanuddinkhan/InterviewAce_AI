@@ -43,6 +43,7 @@ window.Peer = (() => {
     el('peerCode').setAttribute('aria-label', `${languageLabel(selected)} source code`);
     if (announce && room?.problem) {
       el('peerCode').value = languageStarter(selected, room.problem);
+      updateEditorLineNumbers();
       room.problem = {...room.problem, language: selected};
       clearTimeout(codeDebounce);
       codeDebounce = setTimeout(() => {
@@ -58,6 +59,13 @@ window.Peer = (() => {
     try { await fn(event); } catch (error) { toast(error.message, true); }
     finally { if (button) button.disabled = false; if (room) controls(); }
   };
+  function updateEditorLineNumbers() {
+    const editor = el('peerCode'), gutter = el('peerLineNumbers');
+    if (!editor || !gutter) return;
+    const count = editor.value.split('\n').length;
+    gutter.textContent = Array.from({length:count}, (_, index) => String(index + 1)).join('\n');
+    gutter.scrollTop = editor.scrollTop;
+  }
   function formatDuration(seconds) {
     const total = Math.max(0, Math.floor(Number(seconds) || 0));
     const hours = Math.floor(total / 3600), minutes = Math.floor((total % 3600) / 60), remainder = total % 60;
@@ -127,7 +135,7 @@ window.Peer = (() => {
   async function show() {
     if (!mounted) {
       if (!mounting) mounting = (async () => {
-      const markup = await fetch('/assets/peer.html?v=3.4.0').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
+      const markup = await fetch('/assets/peer.html?v=3.4.2').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
       const wrapper = document.createElement('div'); wrapper.id = 'peerWorkspace'; wrapper.innerHTML = markup;
       const solo = document.createElement('section'); solo.className = 'solo-studio'; solo.id='soloStudio';
       while (el('workspace').firstChild) solo.append(el('workspace').firstChild);
@@ -270,17 +278,27 @@ window.Peer = (() => {
   function renderExecutionResults(result) {
     const target = el('codeResults');
     target.replaceChildren();
-    (result.tests || []).forEach((test, index) => {
-      const block = document.createElement('div');
-      const status = test.status === 'passed' ? 'Passed' : (test.status || 'Failed').replaceAll('_', ' ');
-      line(block, `Test Case ${index + 1}: ${status}`, 'strong');
-      if (test.input !== undefined) line(block, `Input: ${test.input}`);
-      if (test.expected !== undefined) line(block, `Expected Output: ${test.expected}`);
-      line(block, `Actual Output: ${test.output || ''}`);
-      if (test.error) line(block, `${test.status === 'compile_error' ? 'Compilation' : 'Execution'} error: ${test.error}`);
+    const tests = result.tests || [];
+    const sandboxUnavailable = tests.some(test => /dockerdesktoplinuxengine|failed to connect to the docker api|cannot connect to the docker daemon|docker daemon is not running/i.test(test.error || ''));
+    if (sandboxUnavailable) line(target, 'The code runner could not start because Docker is unavailable. Start Docker Desktop, then run the tests again.', 'p').className = 'execution-notice';
+    tests.forEach((test, index) => {
+      const block = document.createElement('article');
+      block.className = `execution-case${sandboxUnavailable ? ' is-not-run' : test.passed ? ' is-passed' : ' is-failed'}`;
+      const heading = document.createElement('div'); heading.className = 'execution-case-heading';
+      line(heading, `Test Case: ${index + 1}`, 'strong');
+      line(heading, sandboxUnavailable ? 'Not run' : test.status === 'passed' ? 'Passed' : (test.status || 'Failed').replaceAll('_', ' '), 'span');
+      block.append(heading);
+      if (test.input !== undefined && !sandboxUnavailable) line(block, `Input: ${test.input}`, 'p').className = 'execution-detail';
+      if (test.expected !== undefined) line(block, `Expected output: ${test.expected}`, 'p').className = 'execution-detail';
+      if (!sandboxUnavailable) {
+        line(block, `Actual output: ${test.output || 'No output'}`, 'p').className = 'execution-detail';
+        if (test.error) line(block, `${test.status === 'compile_error' ? 'Compile error' : 'Run error'}: ${test.error}`, 'p').className = 'execution-detail execution-error';
+      }
       target.append(block);
     });
-    line(target, `Summary: ${result.passed || 0} / ${result.total || 0} test cases passed.`, 'strong');
+    line(target, sandboxUnavailable
+      ? `${tests.length} test case${tests.length === 1 ? '' : 's'} not run.`
+      : `${result.passed || 0} of ${result.total || tests.length} test cases passed.`, 'strong').className = 'execution-summary';
   }
   function render() {
     const interviewer = room.role === 'interviewer';
@@ -314,6 +332,7 @@ window.Peer = (() => {
     el('languageSelect').disabled = interviewer || room.status !== 'active';
     el('peerCode').readOnly = interviewer || room.status !== 'active';
     if (document.activeElement !== el('peerCode') || interviewer) el('peerCode').value = room.code;
+    updateEditorLineNumbers();
     const previewing = interviewer && (!room.problem || problemDraftActive);
     const problem = previewing ? problemDraft() : room.problem;
     el('sharedProblemTitle').textContent = problem?.title || (previewing ? (el('problemBank').value === 'custom' ? 'Custom problem draft' : 'Problem preview') : 'Waiting for a problem');
@@ -396,8 +415,6 @@ window.Peer = (() => {
     const target = el('peerReport'); target.replaceChildren(); target.classList.remove('hidden');
     target.className = 'panel peer-report';
     const scores = report.scores || {};
-    const weight = component => Number(report.weights?.[component.key] ?? component.weight);
-    const availableWeight = REPORT_COMPONENTS.reduce((sum, component) => sum + (Number.isFinite(scores[component.key]) ? weight(component) : 0), 0);
     const availableCount = REPORT_COMPONENTS.filter(component => Number.isFinite(scores[component.key])).length;
     const percent = value => `${Number(value).toFixed(1).replace(/\.0$/, '')}%`;
     const section = (parent, title) => { const node = document.createElement('section'); node.className = 'report-block'; line(node, title, 'h3'); parent.append(node); return node; };
@@ -405,36 +422,33 @@ window.Peer = (() => {
     const intro = document.createElement('div'); intro.className = 'report-heading';
     const titleGroup = document.createElement('div'); line(titleGroup, 'INTERVIEW SUMMARY', 'span').className = 'eyebrow';
     line(titleGroup, 'Feedback & report', 'h2');
-    line(titleGroup, `${report.topic} · ${Math.round(report.duration_seconds)} seconds`, 'p').className = 'report-subtitle';
+    line(titleGroup, `${report.topic} · ${formatDuration(report.duration_seconds)}`, 'p').className = 'report-subtitle';
     intro.append(titleGroup); target.append(intro);
 
     const overview = document.createElement('section'); overview.className = `report-overview${availableCount ? '' : ' is-pending'}`;
     const overviewCopy = document.createElement('div');
     line(overviewCopy, availableCount ? 'Combined practice score' : 'Score pending', 'h3');
     line(overviewCopy, availableCount
-      ? `${availableCount} of 4 categories are assessed. The displayed percentage uses the available categories.`
-      : 'No assessment evidence has been recorded yet. Scores are not guessed or filled with zero.', 'p');
+      ? `${availableCount} of 4 areas have results. Areas without a score are left out.`
+      : 'Complete the available interview assessments to see your score.', 'p');
     overview.append(overviewCopy);
     if (Number.isFinite(report.overall_score)) {
       const score = document.createElement('div'); score.className = 'report-total';
       line(score, percent(report.overall_score), 'strong'); line(score, 'out of 100', 'span'); overview.append(score);
-    } else line(overview, 'Add assessment evidence below to calculate your percentage.', 'strong').className = 'report-pending-hint';
+    } else line(overview, 'Complete an assessment to receive a combined score.', 'strong').className = 'report-pending-hint';
     target.append(overview);
 
-    const breakdown = section(target, 'Score breakdown');
-    line(breakdown, 'Scores are percentages. Base weights are 40%, 30%, 20% and 10%; available categories are proportionally renormalized.', 'p').className = 'report-section-help';
+    const breakdown = section(target, 'Your scores');
     const grid = document.createElement('div'); grid.className = 'report-score-grid';
     for (const component of REPORT_COMPONENTS) {
-      const score = scores[component.key], present = Number.isFinite(score), baseWeight = weight(component);
+      const score = scores[component.key], present = Number.isFinite(score);
       const card = document.createElement('article'); card.className = `report-score-card${present ? '' : ' is-missing'}`;
       const head = document.createElement('div'); head.className = 'report-score-head';
-      line(head, component.title, 'h4'); line(head, `${Math.round(baseWeight * 100)}% weight`, 'span').className = 'weight-pill'; card.append(head);
+      line(head, component.title, 'h4'); card.append(head);
       line(card, present ? percent(score) : 'Not assessed', 'strong').className = 'report-component-score';
       if (present) {
         const meter = document.createElement('progress'); meter.max = 100; meter.value = Math.max(0, Math.min(100, score)); meter.setAttribute('aria-label', `${component.title} score ${percent(score)}`); card.append(meter);
-        const normalizedWeight = availableWeight ? baseWeight / availableWeight : 0;
-        const points = (score * normalizedWeight).toFixed(1).replace(/\.0$/, '');
-        line(card, `${percent(normalizedWeight * 100)} of this total · adds ${points} points`, 'p').className = 'report-score-meta';
+        line(card, 'Included in the combined score.', 'p').className = 'report-score-meta';
       } else line(card, component.source, 'p').className = 'report-score-meta';
       grid.append(card);
     }
@@ -442,14 +456,14 @@ window.Peer = (() => {
 
     const missing = REPORT_COMPONENTS.filter(component => !Number.isFinite(scores[component.key]));
     if (missing.length) {
-      const actions = section(target, 'How to complete the report');
+      const actions = section(target, 'To add the missing scores');
       const list = document.createElement('ul'); list.className = 'report-next-list';
       for (const component of missing) line(list, `${component.title}: ${component.source}`, 'li');
       actions.append(list);
     }
 
     if (report.interviewer_feedback) {
-      const feedback = section(target, 'Human interviewer feedback');
+      const feedback = section(target, 'Interviewer feedback');
       const ratings = document.createElement('div'); ratings.className = 'report-rating-grid';
       for (const [label, key] of [['Technical knowledge','technical'],['Problem solving','problem_solving'],['Communication','communication']]) {
         const rating = document.createElement('div'); rating.className = 'report-rating';
@@ -459,15 +473,14 @@ window.Peer = (() => {
       for (const [label, value] of [['Strengths',report.interviewer_feedback.strengths],['Areas to improve',report.interviewer_feedback.improvements]]) {
         if (value) { const note = document.createElement('div'); note.className = 'report-note'; line(note, label, 'strong'); line(note, value, 'p'); feedback.append(note); }
       }
-      line(feedback, 'Technical knowledge and problem solving form the human 30% score. The communication rating is shown for context; it does not replace consented speech metrics.', 'p').className = 'report-section-help';
     }
 
     if (report.coding) {
-      const coding = section(target, 'Final coding submission');
+      const coding = section(target, 'Coding solution');
       line(coding, `${report.coding.passed} of ${report.coding.total} tests passed`, 'strong');
       for (const [index, test] of (report.coding.tests || []).entries()) {
         const row = document.createElement('div'); row.className = `report-test${test.passed ? ' is-passed' : ' is-failed'}`;
-        line(row, `Test ${index + 1} · ${test.passed ? 'Passed' : 'Failed'}`, 'strong');
+        line(row, `Test Case: ${index + 1} · ${test.passed ? 'Passed' : 'Failed'}`, 'strong');
         if (test.output) line(row, `Output: ${test.output}`, 'p');
         if (test.error) line(row, `Error: ${test.error}`, 'p');
         coding.append(row);
@@ -480,9 +493,9 @@ window.Peer = (() => {
     }
 
     if (report.communication) {
-      const speech = section(target, 'Automated speech metrics');
+      const speech = section(target, 'Speaking practice');
       const metrics = document.createElement('div'); metrics.className = 'report-rating-grid';
-      for (const [label, value] of [['Speaking pace',`${report.communication.words_per_minute} words/min`],['Filler words',report.communication.filler_count],['Duration',`${report.communication.duration_seconds} sec`]]) {
+      for (const [label, value] of [['Speaking pace',`${report.communication.words_per_minute} words/min`],['Filler words',report.communication.filler_count],['Recording length',formatDuration(report.communication.duration_seconds)]]) {
         const item = document.createElement('div'); item.className = 'report-rating'; line(item, label, 'span'); line(item, String(value), 'strong'); metrics.append(item);
       }
       speech.append(metrics);
@@ -492,12 +505,12 @@ window.Peer = (() => {
     }
 
     if (report.resume) {
-      const resume = section(target, 'Automated resume checks');
+      const resume = section(target, 'Resume review');
       const checks = document.createElement('ul'); checks.className = 'report-check-list';
       for (const [name, passed] of Object.entries(report.resume.checks || {})) line(checks, `${passed ? '✓' : '•'} ${name.replaceAll('_', ' ')}`, 'li');
       resume.append(checks);
-      if (report.resume.matched_terms?.length) line(resume, `Matched role terms: ${report.resume.matched_terms.join(', ')}`, 'p');
-      if (report.resume.missing_terms?.length) line(resume, `Missing role terms: ${report.resume.missing_terms.join(', ')}`, 'p');
+      if (report.resume.matched_terms?.length) line(resume, `Relevant skills found: ${report.resume.matched_terms.join(', ')}`, 'p');
+      if (report.resume.missing_terms?.length) line(resume, `Skills to add or demonstrate: ${report.resume.missing_terms.join(', ')}`, 'p');
       if (report.resume.method) line(resume, report.resume.method, 'p').className = 'report-section-help';
       (report.resume.suggestions || []).forEach(suggestion => line(resume, suggestion, 'p'));
     }
@@ -515,11 +528,11 @@ window.Peer = (() => {
     }
     if (report.scoring_method) {
       const method = document.createElement('details'); method.className = 'report-method';
-      line(method, 'How the combined percentage is calculated', 'summary');
+      line(method, 'How the combined score works', 'summary');
       line(method, report.scoring_method, 'p'); target.append(method);
     }
     if (report.notice) line(target, report.notice, 'p').className = 'report-disclaimer';
-    const button = line(target, 'Download Feedback Report (PDF)', 'button'); button.type = 'button'; button.className = 'secondary report-download';
+    const button = line(target, 'Download report PDF', 'button'); button.type = 'button'; button.className = 'secondary report-download';
     button.onclick = async () => {
       button.disabled = true;
       try {
@@ -567,6 +580,7 @@ window.Peer = (() => {
         if (room.status !== message.status) await refresh();
       } else if (message.type === 'code' && room.role === 'interviewer') {
         el('peerCode').value = message.source;
+        updateEditorLineNumbers();
         if (message.language) setLanguage(message.language, false);
       }
       else if (['offer','answer','ice'].includes(message.type)) await signal(message);
@@ -687,7 +701,7 @@ window.Peer = (() => {
       el('peerWorkspace').querySelectorAll('.peer-home-only').forEach(node=>node.classList.remove('hidden'));
       ['peerChat','peerDocuments','resumeAnalysis','ragDraft','peerReport'].forEach(id => el(id).replaceChildren());
       el('peerReport').classList.add('hidden'); el('codeResults').textContent = 'Execution results appear here for both participants.';
-      el('peerCode').value = ''; el('audioStatus').textContent = '';
+      el('peerCode').value = ''; updateEditorLineNumbers(); el('audioStatus').textContent = '';
       el('problemBank').value = 'sum'; updateProblemForm();
     }
   }
@@ -708,7 +722,6 @@ window.Peer = (() => {
       livePanel.remove();
     }
     el('peerRoom').querySelectorAll('[data-room-tab]').forEach(button=>button.onclick=()=>tab(button.dataset.roomTab));
-    el('openEditor').onclick=()=>tab('coding');
     el('retryRemoteAudio').onclick=playRemote;
     window.addEventListener('pagehide',stopMedia);
     el('createRoom').onsubmit = action(async () => { const data = await api('/rooms', {method:'POST', body:JSON.stringify({topic:el('peerTopic').value, duration_seconds:Number(el('peerMinutes').value)*60})}); await open(data.id); await history(); });
@@ -740,7 +753,9 @@ window.Peer = (() => {
     });
     ['problemTitle','problemStatement','problemConstraints','problemStarter','problemTests','problemHiddenTests'].forEach(id => el(id).addEventListener('input', () => { problemDraftActive = true; renderProblemPreview(); }));
     el('languageSelect').onchange = () => { setLanguage(el('languageSelect').value, true); };
-    el('peerCode').oninput = () => { clearTimeout(codeDebounce); codeDebounce = setTimeout(() => { try { send({type:'code',source:el('peerCode').value,language:el('languageSelect').value}); } catch(e) { toast(e.message,true); } }, 400); };
+    updateEditorLineNumbers();
+    el('peerCode').oninput = () => { updateEditorLineNumbers(); clearTimeout(codeDebounce); codeDebounce = setTimeout(() => { try { send({type:'code',source:el('peerCode').value,language:el('languageSelect').value}); } catch(e) { toast(e.message,true); } }, 400); };
+    el('peerCode').onscroll = updateEditorLineNumbers;
     for (const [id, final] of [['runCode',false],['submitCode',true]]) el(id).onclick = action(async () => { el('codeResults').textContent = 'Running in the local sandbox…'; try { const result = await request('/execute', {source:el('peerCode').value,language:el('languageSelect').value,final}); renderExecutionResults(result); await refresh(); } catch(e) { el('codeResults').textContent = e.message; throw e; } });
     el('peerChatForm').onsubmit = action(async () => { send({type:'chat',text:el('peerMessage').value}); el('peerMessage').value = ''; });
     el('peerPdf').onchange = () => {

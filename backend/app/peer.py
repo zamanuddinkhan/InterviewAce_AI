@@ -581,10 +581,12 @@ def _pdf_text(value):
 
 
 def _feedback_pdf(report_data):
+    duration = max(0, round(float(report_data.get('duration_seconds') or 0)))
+    minutes, seconds = divmod(duration, 60)
     lines = [
         'InterviewAce Feedback Report',
         f"Topic: {report_data['topic']}",
-        f"Duration: {report_data['duration_seconds']} seconds",
+        f"Duration: {minutes}:{seconds:02d}",
         '',
         f"Overall score: {report_data['overall_score'] if report_data['overall_score'] is not None else 'Pending'}",
         'Score breakdown:',
@@ -603,9 +605,22 @@ def _feedback_pdf(report_data):
     if coding:
         lines.extend(['', f"Coding: {coding['passed']} of {coding['total']} tests passed"])
         for index, test in enumerate(coding.get('tests', []), 1):
-            lines.append(f"  Test {index}: {'Passed' if test.get('passed') else 'Failed'}")
+            lines.append(f"  Test Case: {index} - {'Passed' if test.get('passed') else 'Failed'}")
             if test.get('error'):
                 lines.append(f"    Error: {test['error']}")
+    communication = report_data.get('communication')
+    if communication:
+        lines.extend(['', 'Speaking practice:',
+                      f"  Speaking pace: {communication.get('words_per_minute', 'Not assessed')} words per minute",
+                      f"  Filler words: {communication.get('filler_count', 'Not assessed')}"])
+        lines.extend(f"  - {suggestion}" for suggestion in communication.get('suggestions', []))
+    resume = report_data.get('resume')
+    if resume:
+        lines.extend(['', f"Resume review score: {resume.get('score', 'Not assessed')}"])
+        lines.extend(f"  - {suggestion}" for suggestion in resume.get('suggestions', []))
+    if report_data.get('questions'):
+        lines.extend(['', 'Questions asked:'])
+        lines.extend(f"  - {question}" for question in report_data['questions'])
     lines.extend(['', 'Suggested next steps:'])
     lines.extend(f"  - {step}" for step in report_data.get('improvement_plan', []))
     lines.extend(['', report_data.get('notice', '')])
@@ -631,21 +646,21 @@ def _feedback_pdf(report_data):
             commands.append(f'({_pdf_text(line_text)}) Tj')
         commands.append('ET')
         stream = '\n'.join(commands).encode('latin-1')
-        content_ids.append(len(objects) + 1)
+        content_ids.append(len(objects))
         objects.append(f'<< /Length {len(stream)} >>\nstream\n'.encode() + stream + b'\nendstream')
-        page_ids.append(len(objects) + 1)
+        page_ids.append(len(objects))
         objects.append(None)
-    font_id = len(objects) + 1
+    font_id = len(objects)
     objects.append(b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
-    pages_id = len(objects) + 1
+    pages_id = len(objects)
     objects.append(None)
-    catalog_id = len(objects) + 1
+    catalog_id = len(objects)
     objects.append(None)
     for page_id, content_id in zip(page_ids, content_ids):
-        objects[page_id - 1] = f'<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>'.encode()
+        objects[page_id] = f'<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>'.encode()
     kids = ' '.join(f'{page_id} 0 R' for page_id in page_ids)
-    objects[pages_id - 1] = f'<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>'.encode()
-    objects[catalog_id - 1] = f'<< /Type /Catalog /Pages {pages_id} 0 R >>'.encode()
+    objects[pages_id] = f'<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>'.encode()
+    objects[catalog_id] = f'<< /Type /Catalog /Pages {pages_id} 0 R >>'.encode()
     output = bytearray(b'%PDF-1.4\n%\xe2\xe3\xcf\xd3\n')
     offsets = [0]
     for object_id, value in enumerate(objects[1:], 1):
