@@ -28,6 +28,13 @@ window.Peer = (() => {
   const el = id => document.getElementById(id);
   const LANGUAGE_LABELS = {python:'Python', javascript:'JavaScript', c:'C', cpp:'C++'};
   function languageLabel(language) { return LANGUAGE_LABELS[language] || LANGUAGE_LABELS.python; }
+  function languageStarter(language, problem) {
+    const statement = (problem?.statement || 'Solve the assigned problem.').trim();
+    if (language === 'python') return `# ${statement}\n\n# Read input and write your solution here.\n`;
+    if (language === 'javascript') return `// ${statement}\n\nfunction solve() {\n  // Read input and write your solution here.\n}\n\nsolve();\n`;
+    if (language === 'c') return `/* ${statement} */\n#include <stdio.h>\n\nint main(void) {\n    /* Read input and write your solution here. */\n    return 0;\n}\n`;
+    return `/* ${statement} */\n#include <iostream>\n\nint main() {\n    // Read input and write your solution here.\n    return 0;\n}\n`;
+  }
   function setLanguage(language, announce) {
     const selected = LANGUAGE_LABELS[language] ? language : 'python';
     el('languageSelect').value = selected;
@@ -35,6 +42,7 @@ window.Peer = (() => {
     el('codeEditorLabel').textContent = `${languageLabel(selected)} editor`;
     el('peerCode').setAttribute('aria-label', `${languageLabel(selected)} source code`);
     if (announce && room?.problem) {
+      el('peerCode').value = languageStarter(selected, room.problem);
       room.problem = {...room.problem, language: selected};
       clearTimeout(codeDebounce);
       codeDebounce = setTimeout(() => {
@@ -289,11 +297,15 @@ window.Peer = (() => {
     for (const event of room.events) {
       if (['chat', 'question'].includes(event.kind)) {
         const div = document.createElement('div'); div.className = 'chat-entry';
-        line(div, event.kind === 'question' ? 'INTERVIEWER QUESTION' : `Participant #${event.user_id}`, 'strong');
+        line(div, event.kind === 'question' ? 'INTERVIEWER QUESTION' : (event.user_name || 'Participant'), 'strong');
         line(div, event.payload.text); chat.append(div);
       }
     }
     chat.scrollTop = chat.scrollHeight;
+    const chatAvailable = room.status === 'active';
+    el('peerMessage').disabled = !chatAvailable;
+    el('peerMessage').placeholder = chatAvailable ? 'Type a message' : 'Messaging is available after the interviewer starts the session';
+    el('peerChatForm').querySelector('button[type="submit"]').disabled = !chatAvailable;
     const executions = room.events.filter(e => ['execution', 'submission'].includes(e.kind));
     if (executions.length) el('codeResults').textContent = JSON.stringify(executions.at(-1).payload, null, 2);
     const docs = el('peerDocuments'); docs.replaceChildren();

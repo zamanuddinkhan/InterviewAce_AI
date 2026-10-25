@@ -102,6 +102,12 @@ def event(db, room, user, kind, payload):
     return row
 
 
+def participant_name(user: User | None, fallback: str):
+    if not user:
+        return fallback
+    return (user.name or f'{user.first_name} {user.last_name}').strip() or fallback
+
+
 def snapshot(db, room, user):
     remaining = max(0, math.ceil(room.started_at + room.duration_seconds - time.time())) if room.status == 'active' else 0
     interviewer = db.get(User, room.interviewer_id)
@@ -111,8 +117,8 @@ def snapshot(db, room, user):
             'ended_at': room.ended_at, 'remaining_seconds': remaining,
             'candidate_joined': room.candidate_id is not None,
             'role': 'interviewer' if room.interviewer_id == user.id else 'candidate',
-            'interviewer_name': interviewer.name if interviewer else 'Interviewer',
-            'candidate_name': candidate.name if candidate else None,
+            'interviewer_name': participant_name(interviewer, 'Interviewer'),
+            'candidate_name': participant_name(candidate, 'Candidate') if candidate else None,
             'code': room.code, 'problem': room.problem}
 
 
@@ -218,8 +224,20 @@ def details(room_id: str, user: User = Depends(current_user), db: Session = Depe
     room = access(db, room_id, user)
     data = snapshot(db, room, user)
     rows = db.scalars(select(RoomEvent).where(RoomEvent.room_id == room_id).order_by(RoomEvent.id)).all()
-    data['events'] = [{'kind': r.kind, 'user_id': r.user_id, 'payload': r.payload} for r in rows
-                      if r.kind != 'rag_draft' or user.id == room.interviewer_id]
+    event_users = {
+        participant.id: participant_name(participant, 'Participant')
+        for participant in (
+            db.get(User, room.interviewer_id),
+            db.get(User, room.candidate_id) if room.candidate_id is not None else None,
+        )
+        if participant is not None
+    }
+    data['events'] = [
+        {'kind': r.kind, 'user_id': r.user_id, 'user_name': event_users.get(r.user_id, 'Participant'),
+         'payload': r.payload}
+        for r in rows
+        if r.kind != 'rag_draft' or user.id == room.interviewer_id
+    ]
     docs = db.scalars(select(Document).where(Document.room_id == room_id)).all()
     data['documents'] = [{'id': d.id, 'filename': d.filename, 'kind': d.kind, 'analysis': d.analysis,
                           'searchable': any(str(page.get('text', '')).strip() for page in d.pages)} for d in docs]
