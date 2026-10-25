@@ -184,7 +184,7 @@ window.Peer = (() => {
         const entry = document.createElement('div'); entry.className = 'history-entry'; article.append(entry);
         const button = line(entry, `${row.topic} | ${row.role} | ${row.status} | ${row.id}`, 'button');
         button.className = 'history-item'; button.onclick = action(() => open(row.id));
-        if (row.role === 'interviewer' && row.status !== 'active') {
+        if (!row.deletion_pending && row.status !== 'active') {
           const remove = line(entry, 'Delete room', 'button'); remove.className = 'icon-control delete-room';
           remove.setAttribute('aria-label', `Delete room ${row.id}`); remove.title = 'Delete room';
           remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v6m6-6v6"/></svg>';
