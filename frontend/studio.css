@@ -61,7 +61,17 @@
 .invitation-details { margin-top:10px; }
 .invitation-details summary { font-size:11px; color:var(--muted); font-weight:500; padding:2px 0; }
 .invitation-details p { overflow-wrap:anywhere; }
-.peer-layout[data-tab="coding"],.peer-layout[data-tab="resources"],.peer-layout[data-tab="feedback"] { grid-template-columns:minmax(0,1fr); }
+.peer-layout[data-tab="live"] { grid-template-columns:minmax(0,1.15fr) minmax(270px,.9fr) minmax(250px,.8fr); grid-template-areas:"main conversation video"; }
+.peer-layout[data-tab="coding"],.peer-layout[data-tab="resources"],.peer-layout[data-tab="feedback"] { grid-template-columns:minmax(0,1fr) minmax(250px,320px); grid-template-areas:"main video"; }
+.peer-layout #roomMainColumn { grid-area:main; }
+.peer-layout #roomConversation { grid-area:conversation; }
+.peer-layout #persistentVideoPanel { grid-area:video; position:sticky; top:16px; align-self:start; min-width:0; margin-bottom:20px; padding:16px; }
+.peer-layout #persistentVideoMount { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto auto; gap:12px; }
+.peer-layout .persistent-video-panel .videos { grid-column:1; grid-row:auto; grid-template-columns:minmax(0,1fr); gap:12px; }
+.peer-layout .persistent-video-panel .video-frame { aspect-ratio:16/10; max-height:none; }
+.peer-layout .persistent-video-panel .room-actions, .peer-layout .persistent-video-panel #mediaStatus { grid-column:1; grid-row:auto; }
+.peer-layout .persistent-video-heading { display:block; margin-bottom:14px; }
+.peer-layout .persistent-video-heading .small { display:block; margin-top:4px; }
 .peer-layout[data-tab="coding"] #roomMainColumn { display:grid; grid-template-columns:minmax(260px,.75fr) minmax(0,1.25fr); align-items:start; gap:20px; }
 .peer-layout[data-tab="coding"] #roomMainColumn:has(#problemForm):not(:has(.interviewer-only:not(.hidden))) { grid-template-columns:1fr; }
 #codingPanel { min-width:0; }
@@ -109,10 +119,13 @@
 #soloStudio .answer-form .consent { margin-top:14px; font-weight:400; }
 @media(max-width:1000px) {
   .peer-layout[data-tab="coding"] #roomMainColumn { grid-template-columns:1fr; }
-  .persistent-video-panel { position:relative; top:auto; }
-  #persistentVideoMount { grid-template-columns:minmax(0,1fr) 180px; gap:8px 12px; }
+  .peer-layout #persistentVideoPanel { position:static; top:auto; }
+  .peer-layout #roomConversation .panel { position:static; }
   .solo-presence { grid-template-columns:1fr; }
   .ai-coach { min-height:230px; }
+}
+@media(max-width:1200px) {
+  .peer-layout[data-tab="live"] { grid-template-columns:minmax(0,1fr) minmax(250px,.75fr); grid-template-areas:"main video" "conversation conversation"; }
 }
 @media(max-width:760px) {
   .service-grid { grid-template-columns:1fr; }
@@ -126,10 +139,8 @@
   .room-toolbar .room-actions button { flex:1; width:auto; }
   .room-tabs { gap:4px; }
   .room-tabs button { font-size:11px; padding:10px; flex:1; }
-  #persistentVideoMount { grid-template-columns:1fr; }
-  .persistent-video-panel .videos { grid-column:1; grid-row:auto; }
-  .persistent-video-panel .room-actions, .persistent-video-panel #mediaStatus { grid-column:1; grid-row:auto; }
-  .peer-layout[data-tab="live"] #roomConversation .panel { position:static; }
+  .peer-layout[data-tab="live"] { grid-template-columns:minmax(0,1fr); grid-template-areas:"video" "main" "conversation"; }
+  .peer-layout[data-tab="coding"],.peer-layout[data-tab="resources"],.peer-layout[data-tab="feedback"] { grid-template-columns:minmax(0,1fr); grid-template-areas:"video" "main"; }
   .score-list li { grid-template-columns:80px minmax(0,1fr) 58px; gap:8px; font-size:12px; }
   .solo-presence { padding:16px; }
   .home-choice { padding:15px 12px; }
