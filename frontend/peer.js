@@ -120,7 +120,7 @@ window.Peer = (() => {
   async function show() {
     if (!mounted) {
       if (!mounting) mounting = (async () => {
-      const markup = await fetch('/assets/peer.html?v=3.3.6').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
+      const markup = await fetch('/assets/peer.html?v=3.3.7').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
       const wrapper = document.createElement('div'); wrapper.id = 'peerWorkspace'; wrapper.innerHTML = markup;
       const solo = document.createElement('section'); solo.className = 'solo-studio'; solo.id='soloStudio';
       while (el('workspace').firstChild) solo.append(el('workspace').firstChild);
@@ -692,6 +692,12 @@ window.Peer = (() => {
   function bind() {
     setupProblemBank();
     devices=DeviceMedia.create(el('localVideo'),el('mediaStatus'),deviceChanged);
+    const livePanel=el('localVideo').closest('[data-room-panel="live"]');
+    const videoMount=el('persistentVideoMount');
+    if(livePanel && videoMount) {
+      videoMount.append(livePanel.querySelector('.videos'),livePanel.querySelector('.device-controls'),el('mediaStatus'));
+      livePanel.remove();
+    }
     el('peerRoom').querySelectorAll('[data-room-tab]').forEach(button=>button.onclick=()=>tab(button.dataset.roomTab));
     el('openEditor').onclick=()=>tab('coding');
     el('retryRemoteAudio').onclick=playRemote;
