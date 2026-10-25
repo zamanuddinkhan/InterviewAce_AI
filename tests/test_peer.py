@@ -112,7 +112,8 @@ def test_websocket_chat_code_and_signaling():
                 break
     details = client.get(f'/api/rooms/{room_id}', headers=interviewer).json()
     assert details['code'] == 'print(42)'
-    assert any(e['payload'].get('text') == 'Hello peer' for e in details['events'])
+    chat_event = next(e for e in details['events'] if e['payload'].get('text') == 'Hello peer')
+    assert chat_event['user_name']
 
 
 def test_room_websocket_ticket_is_scoped_and_one_use():
