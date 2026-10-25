@@ -1,4 +1,4 @@
-"""Two-person rooms. MySQL is authoritative; use one ASGI worker for live signaling."""
+﻿"""Two-person rooms. MySQL is authoritative; use one ASGI worker for live signaling."""
 import asyncio
 from contextlib import suppress
 import io
@@ -264,9 +264,10 @@ def details(room_id: str, user: User = Depends(current_user), db: Session = Depe
             visible_count = len((room.problem or {}).get('tests', []))
             public_results = (payload.get('tests') or [])[:visible_count]
             payload['tests'] = public_results
-            payload['passed'] = sum(bool(test.get('passed')) for test in public_results)
-            payload['total'] = visible_count
-            payload['visible_passed'] = payload['passed']
+            payload['passed'] = (row.payload.get('passed', 0) if row.kind == 'submission' else
+                               sum(bool(test.get('passed')) for test in public_results))
+            payload['total'] = (row.payload.get('total', visible_count) if row.kind == 'submission' else visible_count)
+            payload['visible_passed'] = sum(bool(test.get('passed')) for test in public_results)
             payload['visible_total'] = visible_count
             payload['hidden_evaluated'] = row.kind == 'submission' and len((row.payload.get('tests') or [])) > visible_count
         events.append({'kind': row.kind, 'user_id': row.user_id,
@@ -399,10 +400,12 @@ async def execute(room_id: str, body: CodeBody, user: User = Depends(current_use
                        'visible_passed': sum(bool(test.get('passed')) for test in result.get('tests', [])[:visible_count])})
         full_result = dict(result)
         if body.final and hidden_tests:
-            result['tests'] = result['tests'][:visible_count]
+            result['tests'] = [case if index < visible_count else {
+                'redacted': True, 'status': 'evaluated privately', 'points': case.get('points', 1)
+            } for index, case in enumerate(result.get('tests', []))]
             result['hidden_evaluated'] = True
-            result['passed'] = result['visible_passed']
-            result['total'] = result['visible_total']
+            result['passed'] = full_result['passed']
+            result['total'] = full_result['total']
         event(db, room, user, 'submission' if body.final else 'execution', full_result)
         await broadcast(room_id, {'type': 'refresh'})
         return result

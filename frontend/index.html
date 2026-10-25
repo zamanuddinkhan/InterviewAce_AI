@@ -1,21 +1,21 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Prepare with a peer, solve Python challenges, practise with local AI and turn interview feedback into a clear improvement plan.">
   <meta name="theme-color" content="#142d4e">
-  <meta property="og:title" content="InterviewAce AI — Practice with purpose">
+  <meta property="og:title" content="InterviewAce AI â€” Practice with purpose">
   <meta property="og:description" content="A private workspace for peer interviews, Python coding and helpful local AI feedback.">
   <meta property="og:type" content="website">
   <title>InterviewAce AI | Practice with purpose</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <script src="/assets/theme.js?v=3.5.0"></script>
-  <link rel="stylesheet" href="/assets/base.css?v=3.5.0">
-  <link rel="stylesheet" href="/assets/rooms.css?v=3.5.0">
-  <link rel="stylesheet" href="/assets/style.css?v=3.5.0">
-  <link rel="stylesheet" href="/assets/chrome.css?v=3.5.0">
-  <link rel="stylesheet" href="/assets/studio.css?v=3.5.0">
+  <script src="/assets/theme.js?v=3.5.1"></script>
+  <link rel="stylesheet" href="/assets/base.css?v=3.5.1">
+  <link rel="stylesheet" href="/assets/rooms.css?v=3.5.1">
+  <link rel="stylesheet" href="/assets/style.css?v=3.5.1">
+  <link rel="stylesheet" href="/assets/chrome.css?v=3.5.1">
+  <link rel="stylesheet" href="/assets/studio.css?v=3.5.1">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Skip to content</a>
@@ -53,7 +53,7 @@
           </div><label>Contact number<input id="contactNumber" type="tel" maxlength="32" autocomplete="tel" inputmode="tel" placeholder="+91 98765 43210" aria-describedby="contactHelp contactNumberError"><span id="contactHelp" class="field-help">Your contact number stays private.</span><span class="field-error" id="contactNumberError"></span></label></div>
           <label>Email address<input type="email" id="email" maxlength="255" autocomplete="email" required placeholder="you@example.com"><span class="field-error" id="emailError"></span></label>
           <label>Password<div class="password-field"><input type="password" id="password" maxlength="128" autocomplete="current-password" required placeholder="Enter your password" aria-describedby="passwordHelp passwordError"><button type="button" id="togglePassword" class="password-toggle" aria-label="Show password" aria-pressed="false">Show</button></div><span class="field-error" id="passwordError"></span></label>
-          <div id="passwordHelp" class="password-guide hidden"><meter id="passwordStrength" min="0" max="5" value="0" aria-label="Password requirements met"></meter><p id="strengthLabel" aria-live="polite">Choose a unique passphrase</p><ul id="passwordRules"><li data-rule="length">12–128 characters</li><li data-rule="upper">An uppercase letter</li><li data-rule="lower">A lowercase letter</li><li data-rule="number">A number</li><li data-rule="symbol">A symbol, such as ! @ #</li></ul><span class="field-help">Avoid common words, your email, and reused passwords.</span></div>
+          <div id="passwordHelp" class="password-guide hidden"><meter id="passwordStrength" min="0" max="5" value="0" aria-label="Password requirements met"></meter><p id="strengthLabel" aria-live="polite">Choose a unique passphrase</p><ul id="passwordRules"><li data-rule="length">12â€“128 characters</li><li data-rule="upper">An uppercase letter</li><li data-rule="lower">A lowercase letter</li><li data-rule="number">A number</li><li data-rule="symbol">A symbol, such as ! @ #</li></ul><span class="field-help">Avoid common words, your email, and reused passwords.</span></div>
           <label id="confirmLabel" class="hidden">Confirm password<input id="confirmPassword" type="password" maxlength="128" autocomplete="new-password" placeholder="Re-enter your password"><span id="confirmPasswordError" class="field-error" aria-live="polite"></span></label>
           <p id="authError" class="form-error hidden" role="alert"></p>
           <button class="primary full" id="authSubmit" type="submit">Log in</button>
@@ -78,7 +78,7 @@
             <label id="customKindLabel" class="hidden">Custom interview type<input id="customKind" minlength="3" maxlength="100" disabled placeholder="e.g. System design or Python debugging"><span class="field-help">Describe the skills or interview focus you want to practise.</span></label>
             <label>Starting difficulty <select id="difficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select></label>
             <label>Questions <select id="questionLimit" aria-controls="customQuestionLabel"><option value="1">1 (quick practice)</option><option>3</option><option selected>5</option><option>10</option><option value="custom">Custom</option></select></label>
-            <label id="customQuestionLabel" class="hidden">Custom question count<input id="customQuestionLimit" type="number" min="1" max="50" step="1" inputmode="numeric" disabled placeholder="Enter 1–50"><span class="field-help">Choose any whole number from 1 to 50.</span></label>
+            <label id="customQuestionLabel" class="hidden">Custom question count<input id="customQuestionLimit" type="number" min="1" max="50" step="1" inputmode="numeric" disabled placeholder="Enter 1â€“50"><span class="field-help">Choose any whole number from 1 to 50.</span></label>
             <section class="resume-picker" aria-labelledby="resumePickerTitle">
               <h3 id="resumePickerTitle">Resume (optional)</h3>
               <label for="resumeSelect">Use an uploaded resume<select id="resumeSelect"><option value="">No resume</option></select></label>
@@ -94,7 +94,7 @@
         </aside>
         <section class="panel chat-panel">
           <div class="chat-top"><div><h2 id="sessionTitle">Your interview room</h2><p id="sessionMeta" class="small">Start a session from the left panel.</p></div><span id="statusBadge" class="status">Waiting</span></div>
-          <div id="conversation" class="conversation" aria-live="polite"><div class="empty-chat"><span class="big-icon">✦</span><h3>Your interviewer is ready</h3><p>Choose a role and click Start to begin.</p></div></div>
+          <div id="conversation" class="conversation" aria-live="polite"><div class="empty-chat"><span class="big-icon">âœ¦</span><h3>Your interviewer is ready</h3><p>Choose a role and click Start to begin.</p></div></div>
           <section id="soloPresence" class="solo-presence">
             <div id="aiCoach" class="ai-coach" aria-label="Animated AI coach"><svg viewBox="0 0 160 160" role="img" aria-label="Illustrated AI interviewer"><circle cx="80" cy="80" r="76" fill="currentColor" opacity=".09"/><path d="M26 153v-13c0-27 24-43 54-43s54 16 54 43v13" fill="#315c9e"/><path d="m60 100 20 27 20-27" fill="#e4ecfa"/><path d="m75 123 5-6 5 6-3 27h-4" fill="#142d4e"/><path d="M65 83h30v25c-7 10-23 10-30 0" fill="#d8a887"/><ellipse cx="80" cy="61" rx="31" ry="38" fill="#ecc3a3"/><path d="M48 59c-9-40 17-47 34-45 28 0 39 23 29 48l-7-23c-17 9-30 7-41 0L52 61" fill="#24354d"/><g class="coach-eyes" fill="#24354d"><ellipse cx="68" cy="64" rx="3" ry="3"/><ellipse cx="94" cy="64" rx="3" ry="3"/></g><path d="M81 67v10h5" stroke="#b88566" fill="none" stroke-linecap="round"/><path class="coach-mouth" d="M70 85q11 9 22-1" stroke="#925b4e" stroke-width="3" fill="none" stroke-linecap="round"/></svg><strong>AI interview coach</strong><span>Animated illustration &middot; not a human video feed</span><p id="coachStatus" class="small">Ready when you are.</p><button id="readQuestion" type="button" class="secondary" disabled>Read question aloud</button><p id="voiceStatus" class="small">Optional read-aloud uses an installed local browser voice.</p></div>
             <div class="solo-preview"><div class="video-frame"><video id="soloVideo" autoplay muted playsinline></video><span id="soloVideoPlaceholder" class="video-placeholder camera-off"><span id="soloInitial" class="preview-initial" aria-label="Your first initial">?</span><span>Camera is off</span></span></div><div class="room-actions device-controls" aria-label="Camera and microphone controls">
@@ -103,7 +103,7 @@
               <button id="soloStopMedia" type="button" class="device-button stop-devices" aria-label="Turn camera and microphone off" title="Turn camera and microphone off"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 2v10M5.6 5.6a9 9 0 1 0 12.8 0"/></svg></button>
             </div><p id="soloMediaStatus" class="small" aria-live="polite">Preview is optional. Nothing is recorded automatically.</p></div>
           </section>
-          <form id="answerForm" class="answer-form hidden"><label for="answerText">Your answer</label><textarea id="answerText" maxlength="5000" rows="4" placeholder="Type your answer here..." required></textarea><label class="consent"><input id="soloAudioConsent" type="checkbox"> I consent to recording this answer for local transcription. I will review the text before submitting.</label><div class="room-actions"><button type="button" id="soloRecord" class="secondary">Record answer</button><button type="button" id="soloStopRecord" class="ghost" disabled>Stop and transcribe</button></div><p id="soloAudioStatus" class="small" aria-live="polite"></p><div class="answer-actions"><span class="small">Think clearly and use examples.</span><button type="submit" class="primary" id="answerSubmit">Submit answer</button></div></form>
+          <form id="answerForm" class="answer-form hidden"><label for="answerText">Your answer</label><textarea id="answerText" maxlength="5000" rows="4" placeholder="Type your answer here..." required></textarea><label class="consent"><input id="soloAudioConsent" type="checkbox"> <span>I consent to recording this answer for local transcription. I will review the text before submitting.</span></label><div class="room-actions"><button type="button" id="soloRecord" class="secondary">Record answer</button><button type="button" id="soloStopRecord" class="ghost" disabled>Stop and transcribe</button></div><p id="soloAudioStatus" class="small" aria-live="polite"></p><div class="answer-actions"><span class="small">Think clearly and use examples.</span><button type="submit" class="primary" id="answerSubmit">Submit answer</button></div></form>
           <div id="report" class="report hidden"></div>
         </section>
       </div>
@@ -116,9 +116,9 @@
   </footer>
   <noscript><p class="panel">JavaScript is required for live interviews and secure account forms. Enable it in your browser to continue.</p></noscript>
   <script src="/assets/deploy-config.js?v=1" defer></script>
-  <script src="/assets/media.js?v=3.5.0" defer></script>
-  <script src="/assets/solo.js?v=3.5.0" defer></script>
-  <script src="/assets/peer.js?v=3.5.0" defer></script>
-  <script src="/assets/app.js?v=3.5.0" defer></script>
+  <script src="/assets/media.js?v=3.5.1" defer></script>
+  <script src="/assets/solo.js?v=3.5.1" defer></script>
+  <script src="/assets/peer.js?v=3.5.1" defer></script>
+  <script src="/assets/app.js?v=3.5.1" defer></script>
 </body>
 </html>

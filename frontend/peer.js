@@ -108,7 +108,7 @@ window.Peer = (() => {
   async function show() {
     if (!mounted) {
       if (!mounting) mounting = (async () => {
-      const markup = await fetch('/assets/peer.html?v=3.5.0').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
+      const markup = await fetch('/assets/peer.html?v=3.5.1').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
       const wrapper = document.createElement('div'); wrapper.id = 'peerWorkspace'; wrapper.innerHTML = markup;
       const solo = document.createElement('section'); solo.className = 'solo-studio'; solo.id='soloStudio';
       while (el('workspace').firstChild) solo.append(el('workspace').firstChild);
@@ -250,29 +250,11 @@ window.Peer = (() => {
     finally { refreshing = false; if (refreshAgain) { refreshAgain = false; refresh().catch(e => toast(e.message, true)); } }
   }
   function renderExecutionResults(result) {
-    const target = el('codeResults');
-    target.replaceChildren();
-    const tests = result.tests || [];
-    const sandboxUnavailable = tests.some(test => /dockerdesktoplinuxengine|failed to connect to the docker api|cannot connect to the docker daemon|docker daemon is not running/i.test(test.error || ''));
-    if (sandboxUnavailable) line(target, 'The code runner could not start because Docker is unavailable. Start Docker Desktop, then run the tests again.', 'p').className = 'execution-notice';
-    tests.forEach((test, index) => {
-      const block = document.createElement('article');
-      block.className = `execution-case${sandboxUnavailable ? ' is-not-run' : test.passed ? ' is-passed' : ' is-failed'}`;
-      const heading = document.createElement('div'); heading.className = 'execution-case-heading';
-      line(heading, `Test Case: ${index + 1}`, 'strong');
-      line(heading, sandboxUnavailable ? 'Not run' : test.status === 'passed' ? 'Passed' : (test.status || 'Failed').replaceAll('_', ' '), 'span');
-      block.append(heading);
-      if (test.input !== undefined && !sandboxUnavailable) line(block, `Input: ${test.input}`, 'p').className = 'execution-detail';
-      if (test.expected !== undefined) line(block, `Expected output: ${test.expected}`, 'p').className = 'execution-detail';
-      if (!sandboxUnavailable) {
-        line(block, `Actual output: ${test.output || 'No output'}`, 'p').className = 'execution-detail';
-        if (test.error) line(block, `${test.status === 'compile_error' ? 'Compile error' : 'Run error'}: ${test.error}`, 'p').className = 'execution-detail execution-error';
-      }
-      target.append(block);
-    });
-    line(target, sandboxUnavailable
-      ? `${tests.length} test case${tests.length === 1 ? '' : 's'} not run.`
-      : `${result.passed || 0} of ${result.total || tests.length} test cases passed.`, 'strong').className = 'execution-summary';
+    const target=el('codeResults');target.replaceChildren();const tests=result.tests||[];
+    const sandboxUnavailable=tests.some(test=>/dockerdesktoplinuxengine|failed to connect to the docker api|cannot connect to the docker daemon|docker daemon is not running/i.test(test.error||''));
+    if(sandboxUnavailable)line(target,'The code runner could not start because Docker is unavailable. Start Docker Desktop, then run the tests again.','p').className='execution-notice';
+    tests.forEach((test,index)=>{const block=document.createElement('article');block.className='execution-case'+(test.redacted?' is-redacted':sandboxUnavailable?' is-not-run':test.passed?' is-passed':' is-failed');const heading=document.createElement('div');heading.className='execution-case-heading';line(heading,(test.redacted?'Hidden test case ':'Test Case: ')+(index+1),'strong');line(heading,sandboxUnavailable?'Not run':test.redacted?'Evaluated privately':test.status==='passed'?'Passed':(test.status||'Failed').replaceAll('_',' '),'span');block.append(heading);if(!test.redacted&&test.input!==undefined&&!sandboxUnavailable)line(block,'Input: '+test.input,'p').className='execution-detail';if(!test.redacted&&test.expected!==undefined)line(block,'Expected output: '+test.expected,'p').className='execution-detail';if(!test.redacted&&!sandboxUnavailable){line(block,'Actual output: '+(test.output||'No output'),'p').className='execution-detail';if(test.error)line(block,(test.status==='compile_error'?'Compile error':'Run error')+': '+test.error,'p').className='execution-detail execution-error';}target.append(block);});
+    const visiblePassed=result.visible_passed??result.passed??0,visibleTotal=result.visible_total??tests.filter(test=>!test.redacted).length;if(result.verdict)line(target,result.verdict+' · Score '+(result.score??0)+' / '+(result.max_score??0),'h3').className='execution-verdict';line(target,sandboxUnavailable?tests.length+' test cases not run.':visiblePassed+' of '+visibleTotal+' public test cases passed.','strong').className='execution-summary';
   }
   function render() {
     const interviewer = room.role === 'interviewer';

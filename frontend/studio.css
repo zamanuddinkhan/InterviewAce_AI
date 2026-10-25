@@ -188,3 +188,20 @@
 .execution-verdict{color:var(--accent-text);margin-top:14px}.execution-notice{padding:10px;border-radius:9px;background:var(--surface-soft)}
 
 .submission-history-list{display:grid;gap:6px}.submission-history-list p{margin:0;padding:9px 11px;border-radius:8px;background:var(--surface-soft);font-size:12px}
+/* Keep tabs compact while the room summary is hidden, and stack coding panes before they get cramped. */
+#peerRoom .room-heading > .room-tabs { margin:0 0 18px; padding:7px; border:0; background:var(--surface-soft); }
+#peerRoom .room-heading:has(> .room-tabs + #roomOverview.hidden) { padding:12px 24px; }
+#peerRoom .room-heading:has(> .room-tabs + #roomOverview.hidden) > .room-tabs { margin:0; padding:0; background:transparent; }
+@media(max-width:1100px) {
+  .peer-layout[data-tab="coding"] { grid-template-columns:minmax(0,1fr); grid-template-areas:"main" "video"; }
+  .peer-layout[data-tab="coding"] #persistentVideoPanel { position:static; }
+}
+@media(max-width:760px) {
+  #peerRoom .room-heading { padding:14px; }
+  #peerRoom .room-heading:has(> .room-tabs + #roomOverview.hidden) { padding:10px 14px; }
+  .peer-layout[data-tab="coding"] { grid-template-areas:"main" "video"; }
+  .room-heading > .room-tabs { margin-bottom:12px; }
+  .room-heading:has(> .room-tabs + #roomOverview.hidden) > .room-tabs { margin:0; }
+}
+#soloStudio .answer-form .consent { display:flex; align-items:flex-start; gap:10px; margin:14px 0 12px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface-soft); font-size:13px!important; line-height:1.55; }
+#soloStudio .answer-form .consent input { flex:0 0 auto; margin:3px 0 0!important; }
