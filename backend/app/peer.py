@@ -667,7 +667,9 @@ def report_pdf(room_id: str, user: User = Depends(current_user), db: Session = D
 
 @router.post('/{room_id}/undo-delete')
 async def undo_delete(room_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    room = access(db, room_id, user)
+    room = db.get(PeerRoom, room_id)
+    if not room or user.id not in (room.interviewer_id, room.candidate_id):
+        raise HTTPException(404, 'Room not found.')
     deletion = deletion_state(db, [room_id]).get(room_id)
     if not deletion or deletion['requested_by'] != user.id:
         raise HTTPException(404, 'Room not found.')
