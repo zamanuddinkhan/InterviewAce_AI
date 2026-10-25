@@ -82,6 +82,53 @@ def test_shared_code_final_submission_feedback_and_scoring(monkeypatch):
     assert report['scores']['resume'] is None
 
 
+def test_feedback_report_download_is_a_pdf():
+    room_id, interviewer, candidate = room_pair()
+    client.post(f'/api/rooms/{room_id}/start', headers=interviewer)
+    client.post(f'/api/rooms/{room_id}/end', headers=interviewer)
+    response = client.get(f'/api/rooms/{room_id}/report.pdf', headers=candidate)
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('application/pdf')
+    assert response.content.startswith(b'%PDF-1.4')
+    assert 'interviewace-feedback-' in response.headers['content-disposition']
+
+
+def test_visible_and_hidden_tests_are_selected_and_hidden_data_is_redacted(monkeypatch):
+    room_id, interviewer, candidate = room_pair()
+    client.post(f'/api/rooms/{room_id}/start', headers=interviewer)
+    problem = {
+        'title': 'Factorial',
+        'statement': 'Read n and print n factorial.',
+        'starter': '',
+        'tests': [{'input': '0\n', 'expected': '1'}, {'input': '5\n', 'expected': '120'}],
+        'hidden_tests': [{'input': '10\n', 'expected': '3628800'}],
+    }
+    assert client.post(f'/api/rooms/{room_id}/problem', headers=interviewer, json=problem).status_code == 200
+    candidate_details = client.get(f'/api/rooms/{room_id}', headers=candidate).json()
+    assert 'hidden_tests' not in candidate_details['problem']
+    assert all('hidden_tests' not in event['payload'] for event in candidate_details['events'])
+
+    captured = []
+    def fake_execute(source, tests, language='python'):
+        captured.append(tests)
+        return {'tests': [
+            {'passed': True, 'status': 'passed', 'input': case['input'],
+             'expected': case['expected'], 'output': case['expected'], 'error': ''}
+            for case in tests
+        ], 'passed': len(tests), 'total': len(tests)}
+    monkeypatch.setattr(peer.runner, 'execute', fake_execute)
+    visible = client.post(f'/api/rooms/{room_id}/execute', headers=candidate,
+                          json={'source': 'print(1)', 'language': 'python'})
+    assert visible.json()['total'] == 2
+    assert len(captured[0]) == 2
+    final = client.post(f'/api/rooms/{room_id}/execute', headers=candidate,
+                        json={'source': 'print(1)', 'language': 'python', 'final': True})
+    assert final.json()['total'] == 3
+    assert len(captured[1]) == 3
+    assert 'input' not in final.json()['tests'][-1]
+    assert 'expected' not in final.json()['tests'][-1]
+
+
 def test_file_validation_and_private_rag_drafts():
     room_id, interviewer, candidate = room_pair()
     assert client.post(f'/api/rooms/{room_id}/documents', headers=candidate, files={'file': ('bad.pdf', b'not pdf')}).status_code == 400
@@ -114,6 +161,8 @@ def test_websocket_chat_code_and_signaling():
     assert details['code'] == 'print(42)'
     chat_event = next(e for e in details['events'] if e['payload'].get('text') == 'Hello peer')
     assert chat_event['user_name']
+    assert details['interviewer_id']
+    assert details['candidate_id']
 
 
 def test_room_websocket_ticket_is_scoped_and_one_use():
@@ -180,6 +229,40 @@ def test_sandbox_unavailable_fails_closed(monkeypatch):
     monkeypatch.setattr(runner.subprocess, 'Popen', unavailable)
     with pytest.raises(RuntimeError, match='host execution is disabled'):
         runner.execute('print(1)', [{'input':'', 'expected':'1'}])
+
+
+def test_runner_passes_each_case_stdin_and_reports_runtime_errors(monkeypatch):
+    from backend.app import runner
+
+    class Process:
+        def __init__(self, command, stdin, stdout, stderr):
+            self.stdout = stdout
+            self.stderr = stderr
+            self.returncode = 0
+
+        def communicate(self, input, timeout):
+            outputs = {b'': b'empty\n', b'one\ntwo\n': b'3\n'}
+            self.stdout.write(outputs[input])
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    monkeypatch.setattr(runner.subprocess, 'Popen', Process)
+    result = runner.execute('print("test")', [
+        {'input': '', 'expected': 'empty'},
+        {'input': 'one\ntwo\n', 'expected': '3'},
+    ])
+    assert result['passed'] == result['total'] == 2
+    assert [case['status'] for case in result['tests']] == ['passed', 'passed']
+
+    class FailingProcess(Process):
+        def communicate(self, input, timeout):
+            self.stderr.write(b'boom')
+            self.returncode = 1
+
+    monkeypatch.setattr(runner.subprocess, 'Popen', FailingProcess)
+    failed = runner.execute('raise RuntimeError()', [{'input': '', 'expected': ''}])
+    assert failed['tests'][0]['status'] == 'runtime_error'
 
 
 def text_pdf():

@@ -76,6 +76,7 @@ window.Peer = (() => {
     const fields = [['problemTitle','title'],['problemStatement','statement'],['problemConstraints','constraints'],['problemStarter','starter']];
     for (const [id, key] of fields) { el(id).value = custom ? '' : problem[key]; el(id).placeholder = custom ? `Enter ${key === 'title' ? 'a title' : key === 'statement' ? 'the problem statement' : key === 'constraints' ? 'optional constraints' : 'optional starter code'}` : ''; }
     el('problemTests').value = custom ? '' : JSON.stringify(problem.tests, null, 2);
+    el('problemHiddenTests').value = '';
     el('problemTests').placeholder = '[{"input":"2 3\\n","expected":"5"}]';
     el('problemModeHelp').textContent = custom
       ? 'Write your own title and statement, then provide 1–5 test cases as a JSON array with input and expected output.'
@@ -103,6 +104,7 @@ window.Peer = (() => {
       el('problemConstraints').value = problem.constraints || '';
       el('problemStarter').value = problem.starter || '';
       el('problemTests').value = JSON.stringify(problem.tests || [], null, 2);
+      el('problemHiddenTests').value = JSON.stringify(problem.hidden_tests || [], null, 2);
       el('problemModeHelp').textContent = 'This problem is assigned. Edit it here and send it again to replace it before the candidate submits.';
     }
     el('problemSubmit').textContent = 'Update coding problem';
@@ -258,6 +260,21 @@ window.Peer = (() => {
     try { const data = await api('/rooms/' + id); if (room?.id === id) { room = data; render(); } }
     finally { refreshing = false; if (refreshAgain) { refreshAgain = false; refresh().catch(e => toast(e.message, true)); } }
   }
+  function renderExecutionResults(result) {
+    const target = el('codeResults');
+    target.replaceChildren();
+    (result.tests || []).forEach((test, index) => {
+      const block = document.createElement('div');
+      const status = test.status === 'passed' ? 'Passed' : (test.status || 'Failed').replaceAll('_', ' ');
+      line(block, `Test Case ${index + 1}: ${status}`, 'strong');
+      if (test.input !== undefined) line(block, `Input: ${test.input}`);
+      if (test.expected !== undefined) line(block, `Expected Output: ${test.expected}`);
+      line(block, `Actual Output: ${test.output || ''}`);
+      if (test.error) line(block, `${test.status === 'compile_error' ? 'Compilation' : 'Execution'} error: ${test.error}`);
+      target.append(block);
+    });
+    line(target, `Summary: ${result.passed || 0} / ${result.total || 0} test cases passed.`, 'strong');
+  }
   function render() {
     const interviewer = room.role === 'interviewer';
     if (interviewer && room.problem && !problemDraftActive) syncProblemForm(room.problem);
@@ -294,10 +311,15 @@ window.Peer = (() => {
       ? (previewing ? 'This is a live preview. Click Assign coding problem to send this challenge to the candidate.' : 'You are the interviewer: this is the candidate’s read-only code. The assigned problem is shown above.')
       : room.status!=='active'?`Your ${languageLabel(language)} editor is here. It unlocks when the interviewer starts the session.`:!problem?'You can write code now. Run and Submit unlock after the interviewer assigns a problem.':'Write your solution below, run the tests, then submit your final answer.';
     const chat = el('peerChat'); chat.replaceChildren();
+    const participantNames = new Map([
+      [room.interviewer_id, room.interviewer_name],
+      [room.candidate_id, room.candidate_name]
+    ]);
     for (const event of room.events) {
       if (['chat', 'question'].includes(event.kind)) {
         const div = document.createElement('div'); div.className = 'chat-entry';
-        line(div, event.kind === 'question' ? 'INTERVIEWER QUESTION' : (event.user_name || 'Participant'), 'strong');
+        const senderName = event.user_name || participantNames.get(event.user_id) || 'Participant';
+        line(div, event.kind === 'question' ? 'INTERVIEWER QUESTION' : senderName, 'strong');
         line(div, event.payload.text); chat.append(div);
       }
     }
@@ -307,7 +329,7 @@ window.Peer = (() => {
     el('peerMessage').placeholder = chatAvailable ? 'Type a message' : 'Messaging is available after the interviewer starts the session';
     el('peerChatForm').querySelector('button[type="submit"]').disabled = !chatAvailable;
     const executions = room.events.filter(e => ['execution', 'submission'].includes(e.kind));
-    if (executions.length) el('codeResults').textContent = JSON.stringify(executions.at(-1).payload, null, 2);
+    if (executions.length) renderExecutionResults(executions.at(-1).payload);
     const docs = el('peerDocuments'); docs.replaceChildren();
     const selected = el('ragDocument').value; el('ragDocument').replaceChildren();
     for (const doc of room.documents) {
@@ -485,8 +507,16 @@ window.Peer = (() => {
       line(method, report.scoring_method, 'p'); target.append(method);
     }
     if (report.notice) line(target, report.notice, 'p').className = 'report-disclaimer';
-    const button = line(target, 'Download report (JSON)', 'button'); button.type = 'button'; button.className = 'secondary report-download';
-    button.onclick = () => saveBlob(new Blob([JSON.stringify(report, null, 2)], {type:'application/json'}), `interviewace-${room.id}.json`);
+    const button = line(target, 'Download Feedback Report (PDF)', 'button'); button.type = 'button'; button.className = 'secondary report-download';
+    button.onclick = async () => {
+      button.disabled = true;
+      try {
+        const response = await fetch(`/api/rooms/${room.id}/report.pdf`, {credentials:'same-origin', headers:{'X-Requested-With':'InterviewAce'}});
+        if (!response.ok) throw new Error('Feedback report could not be downloaded.');
+        saveBlob(await response.blob(), `interviewace-feedback-${room.id}.pdf`);
+      } catch (error) { toast(error.message, true); }
+      finally { button.disabled = false; }
+    };
     tab(roomTab);
   }
   function saveBlob(blob, filename) { const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
@@ -670,18 +700,23 @@ window.Peer = (() => {
     el('sendQuestion').onsubmit = action(async () => { await request('/questions', {text:el('peerQuestion').value}); el('peerQuestion').value = ''; await refresh(); });
     el('problemForm').onsubmit = action(async () => {
       let tests;
+      let hiddenTests = [];
       try { tests = JSON.parse(el('problemTests').value); }
       catch { throw new Error('Tests must be valid JSON: use an array of objects with input and expected strings.'); }
+      try { hiddenTests = el('problemHiddenTests').value.trim() ? JSON.parse(el('problemHiddenTests').value) : []; }
+      catch { throw new Error('Hidden tests must be valid JSON.'); }
       if (!Array.isArray(tests) || tests.length < 1 || tests.length > 5 || tests.some(test => !test || typeof test.input !== 'string' || typeof test.expected !== 'string'))
         throw new Error('Add between 1 and 5 test cases. Each needs string fields named input and expected.');
-      await request('/problem', {title:el('problemTitle').value, statement:el('problemStatement').value, constraints:el('problemConstraints').value, starter:el('problemStarter').value, tests});
+      if (!Array.isArray(hiddenTests) || hiddenTests.length > 50 || hiddenTests.some(test => !test || typeof test.input !== 'string' || typeof test.expected !== 'string'))
+        throw new Error('Hidden tests must be an array of objects with string input and expected fields.');
+      await request('/problem', {title:el('problemTitle').value, statement:el('problemStatement').value, constraints:el('problemConstraints').value, starter:el('problemStarter').value, tests, hidden_tests:hiddenTests});
       problemDraftActive = false;
       await refresh();
     });
-    ['problemTitle','problemStatement','problemConstraints','problemStarter','problemTests'].forEach(id => el(id).addEventListener('input', () => { problemDraftActive = true; renderProblemPreview(); }));
+    ['problemTitle','problemStatement','problemConstraints','problemStarter','problemTests','problemHiddenTests'].forEach(id => el(id).addEventListener('input', () => { problemDraftActive = true; renderProblemPreview(); }));
     el('languageSelect').onchange = () => { setLanguage(el('languageSelect').value, true); };
     el('peerCode').oninput = () => { clearTimeout(codeDebounce); codeDebounce = setTimeout(() => { try { send({type:'code',source:el('peerCode').value,language:el('languageSelect').value}); } catch(e) { toast(e.message,true); } }, 400); };
-    for (const [id, final] of [['runCode',false],['submitCode',true]]) el(id).onclick = action(async () => { el('codeResults').textContent = 'Running in the local sandbox…'; try { await request('/execute', {source:el('peerCode').value,language:el('languageSelect').value,final}); await refresh(); } catch(e) { el('codeResults').textContent = e.message; throw e; } });
+    for (const [id, final] of [['runCode',false],['submitCode',true]]) el(id).onclick = action(async () => { el('codeResults').textContent = 'Running in the local sandbox…'; try { const result = await request('/execute', {source:el('peerCode').value,language:el('languageSelect').value,final}); renderExecutionResults(result); await refresh(); } catch(e) { el('codeResults').textContent = e.message; throw e; } });
     el('peerChatForm').onsubmit = action(async () => { send({type:'chat',text:el('peerMessage').value}); el('peerMessage').value = ''; });
     el('peerPdf').onchange = () => {
       const isImage = /\.(png|jpe?g|gif|webp)$/i.test(el('peerPdf').files[0]?.name || '');
