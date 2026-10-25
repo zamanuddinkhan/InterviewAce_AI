@@ -284,6 +284,9 @@ window.Peer = (() => {
       : {local: room.candidate_name, remote: room.interviewer_name};
     el('localVideoLabel').textContent = names.local || 'Loading participant...';
     el('remoteVideoLabel').textContent = names.remote || 'Waiting for participant...';
+    el('localInitial').textContent = (names.local || '?').trim().charAt(0).toUpperCase();
+    el('remoteInitial').textContent = (names.remote || '?').trim().charAt(0).toUpperCase();
+    el('remoteCameraStatus').textContent = names.remote ? 'Camera is off' : 'Waiting for your peer to connect';
     const statusText=room.status==='waiting' ? (room.candidate_joined?'Candidate joined — ready to start':'Waiting for a candidate') : room.status==='active'?'Interview in progress':'Interview completed';
     el('peerIdentity').textContent=`You are the ${room.role}. ${statusText}.`;
     el('peerRoomCode').textContent=`Room code: ${room.id}`;
