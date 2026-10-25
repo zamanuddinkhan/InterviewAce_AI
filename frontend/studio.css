@@ -205,3 +205,37 @@
 }
 #soloStudio .answer-form .consent { display:flex; align-items:flex-start; gap:10px; margin:14px 0 12px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--surface-soft); font-size:13px!important; line-height:1.55; }
 #soloStudio .answer-form .consent input { flex:0 0 auto; margin:3px 0 0!important; }
+/* Room tabs live inside the section layout and stay attached to its content. */
+.peer-layout { grid-template-areas:"tabs tabs tabs" "main conversation video"; }
+.peer-layout[data-tab="live"] { grid-template-areas:"tabs tabs tabs" "main conversation video"; }
+.peer-layout[data-tab="coding"],.peer-layout[data-tab="resources"],.peer-layout[data-tab="feedback"] { grid-template-areas:"tabs tabs" "main video"; }
+.peer-layout > .room-tabs { grid-area:tabs; margin:0 0 -8px; padding:6px; background:var(--surface); border:1px solid var(--line); border-radius:14px 14px 10px 10px; }
+#problemForm { grid-template-columns:minmax(0,1fr); gap:14px; }
+#problemForm > .bank-section,#problemForm > fieldset,#problemForm > .assignment-actions { grid-column:1/-1; min-width:0; }
+.bank-section,.problem-fields,.test-case-fields,.assessment-settings { margin:0; padding:16px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+.bank-section h3 { margin:0 0 12px; font-size:15px; }
+.bank-section > label { margin-top:12px; }
+.problem-fields,.test-case-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 16px; }
+.problem-fields legend,.test-case-fields legend,.assessment-settings>legend { font-size:15px; font-weight:700; padding:0 7px; }
+.problem-fields > label,.test-case-fields > label { min-width:0; margin:0; }
+.problem-fields > .field-full,.test-case-fields > .field-help { grid-column:1/-1; }
+.problem-fields textarea,.test-case-fields textarea { min-height:100px; resize:vertical; }
+.problem-fields #problemStarter,.test-case-fields textarea { font-family:Consolas,"Courier New",monospace; font-size:12px; }
+.assessment-setting-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); align-items:start; gap:12px 16px; }
+.assessment-setting-grid>label { min-width:0; margin:0; }
+.assessment-setting-grid>.language-options { grid-column:span 2; align-self:stretch; }
+.assessment-setting-grid>.inline-option { grid-column:1/-1; }
+@media(max-width:1100px) {
+  .peer-layout[data-tab="live"] { grid-template-columns:minmax(0,1fr) minmax(250px,.8fr); grid-template-areas:"tabs tabs" "main video" "conversation conversation"; }
+  .peer-layout[data-tab="coding"],.peer-layout[data-tab="resources"],.peer-layout[data-tab="feedback"] { grid-template-columns:minmax(0,1fr); grid-template-areas:"tabs" "main" "video"; }
+}
+@media(max-width:760px) {
+  .peer-layout[data-tab="live"] { grid-template-columns:minmax(0,1fr); grid-template-areas:"tabs" "video" "main" "conversation"; }
+  .peer-layout[data-tab="coding"],.peer-layout[data-tab="resources"],.peer-layout[data-tab="feedback"] { grid-template-columns:minmax(0,1fr); grid-template-areas:"tabs" "main" "video"; }
+  .problem-fields,.test-case-fields,.assessment-setting-grid { grid-template-columns:minmax(0,1fr); }
+  .problem-fields > .field-full,.test-case-fields > .field-help,.assessment-setting-grid>.language-options,.assessment-setting-grid>.inline-option { grid-column:1; }
+  .bank-section,.problem-fields,.test-case-fields,.assessment-settings { padding:12px; }
+  .peer-layout > .room-tabs { margin-bottom:-8px; flex-wrap:nowrap; overflow-x:auto; }
+  .peer-layout > .room-tabs button { flex:0 0 auto; white-space:nowrap; }
+}
+#peerRoom .room-heading:has(> #roomOverview.hidden) { display:none; }
