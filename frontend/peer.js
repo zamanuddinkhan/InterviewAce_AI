@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 window.Peer = (() => {
   let mounted = false, room = null, socket = null, stream = null, pc = null, recorder = null;
   let reconnect = null, codeDebounce = null, candidates = [], recordingChunks = [], lastStatus = '', refreshing = false, refreshAgain = false, connecting = false;
@@ -7,17 +7,17 @@ window.Peer = (() => {
   const deletionTimers = new Map();
   const PROBLEM_BANK = {
     sum: {title:'Sum two integers',statement:'Read two integers from standard input and print their sum.',constraints:'Both integers are between -1,000,000 and 1,000,000.',starter:'a, b = map(int, input().split())\n# Print the sum',tests:[{input:'2 3\n',expected:'5'},{input:'-1 4\n',expected:'3'}]},
-    reverse: {title:'Reverse a string',statement:'Read one line and print its characters in reverse order.',constraints:'The input contains 1–1,000 characters.',starter:'text = input()\n# Print the reversed text',tests:[{input:'hello\n',expected:'olleh'},{input:'python\n',expected:'nohtyp'}]},
+    reverse: {title:'Reverse a string',statement:'Read one line and print its characters in reverse order.',constraints:'The input contains 1â€“1,000 characters.',starter:'text = input()\n# Print the reversed text',tests:[{input:'hello\n',expected:'olleh'},{input:'python\n',expected:'nohtyp'}]},
     palindrome: {title:'Check a palindrome',statement:'Read one word and print True if it reads the same forwards and backwards when letter case is ignored; otherwise print False.',constraints:'The input is one non-empty word containing letters.',starter:'word = input().strip().lower()\n# Print whether word is a palindrome',tests:[{input:'Racecar\n',expected:'True'},{input:'Interview\n',expected:'False'}]},
-    factorial: {title:'Calculate a factorial',statement:'Read a non-negative integer n and print n factorial. By definition, 0 factorial is 1.',constraints:'0 ≤ n ≤ 20.',starter:'n = int(input())\n# Calculate and print n factorial',tests:[{input:'0\n',expected:'1'},{input:'5\n',expected:'120'}]},
+    factorial: {title:'Calculate a factorial',statement:'Read a non-negative integer n and print n factorial. By definition, 0 factorial is 1.',constraints:'0 â‰¤ n â‰¤ 20.',starter:'n = int(input())\n# Calculate and print n factorial',tests:[{input:'0\n',expected:'1'},{input:'5\n',expected:'120'}]},
     maximum: {title:'Find the largest of three numbers',statement:'Read three space-separated integers and print the largest.',constraints:'The input always contains exactly three integers.',starter:'numbers = list(map(int, input().split()))\n# Print the largest number',tests:[{input:'3 9 4\n',expected:'9'},{input:'-5 -2 -8\n',expected:'-2'}]},
     vowels: {title:'Count vowels',statement:'Read a line and print the number of English vowels (a, e, i, o, u), ignoring letter case.',constraints:'The line contains at most 1,000 characters.',starter:'text = input().lower()\n# Count and print the vowels',tests:[{input:'InterviewAce\n',expected:'6'},{input:'rhythm\n',expected:'0'}]},
-    fibonacci: {title:'Find a Fibonacci number',statement:'Read n and print the zero-indexed Fibonacci number F(n), where F(0)=0 and F(1)=1.',constraints:'0 ≤ n ≤ 30.',starter:'n = int(input())\na, b = 0, 1\n# Calculate F(n) and print it',tests:[{input:'0\n',expected:'0'},{input:'7\n',expected:'13'}]},
-    prime: {title:'Check for a prime number',statement:'Read an integer and print True if it is prime; otherwise print False.',constraints:'2 ≤ n ≤ 1,000,000.',starter:'n = int(input())\n# Check whether n is prime',tests:[{input:'2\n',expected:'True'},{input:'21\n',expected:'False'}]},
+    fibonacci: {title:'Find a Fibonacci number',statement:'Read n and print the zero-indexed Fibonacci number F(n), where F(0)=0 and F(1)=1.',constraints:'0 â‰¤ n â‰¤ 30.',starter:'n = int(input())\na, b = 0, 1\n# Calculate F(n) and print it',tests:[{input:'0\n',expected:'0'},{input:'7\n',expected:'13'}]},
+    prime: {title:'Check for a prime number',statement:'Read an integer and print True if it is prime; otherwise print False.',constraints:'2 â‰¤ n â‰¤ 1,000,000.',starter:'n = int(input())\n# Check whether n is prime',tests:[{input:'2\n',expected:'True'},{input:'21\n',expected:'False'}]},
     deduplicate: {title:'Remove duplicate numbers',statement:'Read space-separated integers and print each number once, preserving its first-seen order.',constraints:'The input contains at least one integer.',starter:'numbers = list(map(int, input().split()))\n# Print unique numbers in their original order',tests:[{input:'1 2 1 3 2\n',expected:'1 2 3'},{input:'4 4 4\n',expected:'4'}]},
     secondLargest: {title:'Find the second-largest distinct number',statement:'Read space-separated integers and print the second-largest distinct value.',constraints:'The input contains at least two distinct integers.',starter:'numbers = list(map(int, input().split()))\n# Find and print the second-largest distinct number',tests:[{input:'4 1 7 7 3\n',expected:'4'},{input:'10 2 8\n',expected:'8'}]},
-    binarySearch: {title:'Binary search',statement:'Read n, then n sorted space-separated integers, then a target. Print the target index (zero-based), or -1 if it is absent.',constraints:'The list is sorted in ascending order and 0 ≤ n ≤ 1,000.',starter:'n = int(input())\nvalues = list(map(int, input().split()))\ntarget = int(input())\n# Print the zero-based index or -1',tests:[{input:'5\n1 3 5 7 9\n7\n',expected:'3'},{input:'4\n2 4 6 8\n5\n',expected:'-1'}]},
-    fizzBuzz: {title:'FizzBuzz',statement:'Read n. For each number from 1 through n, print FizzBuzz when divisible by both 3 and 5, Fizz when divisible by 3, Buzz when divisible by 5, or the number otherwise. Print one result per line.',constraints:'1 ≤ n ≤ 100.',starter:'n = int(input())\nfor number in range(1, n + 1):\n    pass  # Replace this line with the FizzBuzz rules',tests:[{input:'5\n',expected:'1\n2\nFizz\n4\nBuzz'},{input:'3\n',expected:'1\n2\nFizz'}]}
+    binarySearch: {title:'Binary search',statement:'Read n, then n sorted space-separated integers, then a target. Print the target index (zero-based), or -1 if it is absent.',constraints:'The list is sorted in ascending order and 0 â‰¤ n â‰¤ 1,000.',starter:'n = int(input())\nvalues = list(map(int, input().split()))\ntarget = int(input())\n# Print the zero-based index or -1',tests:[{input:'5\n1 3 5 7 9\n7\n',expected:'3'},{input:'4\n2 4 6 8\n5\n',expected:'-1'}]},
+    fizzBuzz: {title:'FizzBuzz',statement:'Read n. For each number from 1 through n, print FizzBuzz when divisible by both 3 and 5, Fizz when divisible by 3, Buzz when divisible by 5, or the number otherwise. Print one result per line.',constraints:'1 â‰¤ n â‰¤ 100.',starter:'n = int(input())\nfor number in range(1, n + 1):\n    pass  # Replace this line with the FizzBuzz rules',tests:[{input:'5\n',expected:'1\n2\nFizz\n4\nBuzz'},{input:'3\n',expected:'1\n2\nFizz'}]}
   };
   const REPORT_COMPONENTS = [
     {key:'coding',title:'Coding',weight:.4,source:'Submit a final solution from the Coding editor.'},
@@ -59,12 +59,14 @@ window.Peer = (() => {
     try { await fn(event); } catch (error) { toast(error.message, true); }
     finally { if (button) button.disabled = false; if (room) controls(); }
   };
+  function escapeCode(text){return text.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');}
+  function renderSyntaxHighlight(){const code=el('peerCode'),layer=el('peerCodeHighlight');if(!code||!layer)return;const keywords={python:'and as assert async await break class continue def del elif else except False finally for from global if import in is lambda None nonlocal not or pass raise return True try while with yield',javascript:'async await break case catch class const continue debugger default delete do else export extends false finally for from function if import in instanceof let new null return static super switch this throw true try typeof undefined var void while yield',c:'auto break case char const continue default do double else enum extern float for goto if int long register return short signed sizeof static struct switch typedef union unsigned void volatile while',cpp:'alignas auto bool break case char class const continue default delete do double else enum explicit extern false float for friend goto if inline int long namespace new nullptr private protected public register return short signed sizeof static struct switch template this throw true try typedef typename union unsigned using virtual void volatile while'};const language=el('languageSelect').value;const words=(keywords[language]||keywords.python).split(' ');const pattern=/(#.*$|\/\*[\s\S]*?\*\/|\/\/.*$|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b\d+(?:\.\d+)?\b|\b[A-Za-z_$][\w$]*\b)/gm;let html='',last=0,match;while((match=pattern.exec(code.value))){html+=escapeCode(code.value.slice(last,match.index));const token=match[0],cls=/^(#|\/\/|\/\*)/.test(token)?'tok-comment':/^["']/.test(token)?'tok-string':/^\d/.test(token)?'tok-number':words.includes(token)?'tok-keyword':'tok-plain';html+='<span class="'+cls+'">'+escapeCode(token)+'</span>';last=pattern.lastIndex;}html+=escapeCode(code.value.slice(last));layer.innerHTML=html+'\n';layer.scrollTop=code.scrollTop;layer.scrollLeft=code.scrollLeft;}
   function updateEditorLineNumbers() {
     const editor = el('peerCode'), gutter = el('peerLineNumbers');
     if (!editor || !gutter) return;
     const count = editor.value.split('\n').length;
     gutter.textContent = Array.from({length:count}, (_, index) => String(index + 1)).join('\n');
-    gutter.scrollTop = editor.scrollTop;
+    gutter.scrollTop=editor.scrollTop;renderSyntaxHighlight();
   }
   function formatDuration(seconds) {
     const total = Math.max(0, Math.floor(Number(seconds) || 0));
@@ -78,64 +80,35 @@ window.Peer = (() => {
   const send = data => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(data)); else throw new Error('Room connection is offline. Reconnect before continuing.'); };
   function line(parent, text, tag = 'p') { const item = document.createElement(tag); item.textContent = text; parent.append(item); return item; }
   function details(parent, title, data) { const d = document.createElement('details'); line(d, title, 'summary'); line(d, JSON.stringify(data, null, 2), 'pre'); parent.append(d); }
+  function bankMeta(key) {
+    const groups={sum:['Math','easy'],reverse:['Strings','easy'],palindrome:['Strings','easy'],factorial:['Math','easy'],maximum:['Arrays','easy'],vowels:['Strings','easy'],fibonacci:['Dynamic programming','medium'],prime:['Math','medium'],deduplicate:['Arrays','easy'],secondLargest:['Arrays','medium'],binarySearch:['Searching','medium'],fizzBuzz:['Algorithms','easy']};return groups[key]||['Algorithms','medium'];
+  }
   function setupProblemBank() {
-    const select = el('problemBank'); select.replaceChildren();
-    for (const [key, problem] of Object.entries(PROBLEM_BANK)) select.add(new Option(problem.title, key));
-    select.add(new Option('Write a custom problem', 'custom'));
-    select.value = 'sum';
-    updateProblemForm();
-    select.onchange = () => { problemDraftActive = true; updateProblemForm(); };
+    const topicFilter=el('bankTopicFilter');[...new Set(Object.keys(PROBLEM_BANK).map(key=>bankMeta(key)[0]))].sort().forEach(topic=>topicFilter.add(new Option(topic,topic)));
+    const updateOptions=()=>{const select=el('problemBank'),prior=select.value,query=el('problemSearch').value.trim().toLowerCase(),topic=topicFilter.value,difficulty=el('bankDifficultyFilter').value;select.replaceChildren();
+      for(const [key,problem] of Object.entries(PROBLEM_BANK)){const meta=bankMeta(key);if((topic&&meta[0]!==topic)||(difficulty&&meta[1]!==difficulty)||(query&&!(problem.title+' '+meta[0]+' '+problem.statement).toLowerCase().includes(query)))continue;select.add(new Option(problem.title+' Â· '+meta[1],key));}
+      select.add(new Option('Write a custom problem','custom'));select.value=[...select.options].some(option=>option.value===prior)?prior:(select.options[0]?.value||'custom');updateProblemForm();};
+    el('problemSearch').oninput=updateOptions;topicFilter.onchange=updateOptions;el('bankDifficultyFilter').onchange=updateOptions;el('problemBank').onchange=()=>{problemDraftActive=true;updateProblemForm();};updateOptions();
   }
   function updateProblemForm() {
-    const custom = el('problemBank').value === 'custom', problem = PROBLEM_BANK[el('problemBank').value];
-    const fields = [['problemTitle','title'],['problemStatement','statement'],['problemConstraints','constraints'],['problemStarter','starter']];
-    for (const [id, key] of fields) { el(id).value = custom ? '' : problem[key]; el(id).placeholder = custom ? `Enter ${key === 'title' ? 'a title' : key === 'statement' ? 'the problem statement' : key === 'constraints' ? 'optional constraints' : 'optional starter code'}` : ''; }
-    el('problemTests').value = custom ? '' : JSON.stringify(problem.tests, null, 2);
-    el('problemHiddenTests').value = '';
-    el('problemTests').placeholder = '[{"input":"2 3\\n","expected":"5"}]';
-    el('problemModeHelp').textContent = custom
-      ? 'Write your own title and statement, then provide 1–5 test cases as a JSON array with input and expected output.'
-      : 'Choose a ready-to-use problem. You can edit its details and test cases before assigning it.';
-    el('problemSubmit').textContent = custom ? 'Send custom problem' : 'Assign coding problem';
-    renderProblemPreview();
+    const custom=el('problemBank').value==='custom',key=el('problemBank').value,problem=PROBLEM_BANK[key];
+    for(const [id,field] of [['problemTitle','title'],['problemStatement','statement'],['problemConstraints','constraints'],['problemStarter','starter']])el(id).value=custom?'':problem[field];
+    const meta=bankMeta(key);el('problemTopic').value=custom?'':meta[0];el('problemDifficulty').value=custom?'medium':meta[1];el('problemTests').value=custom?'':JSON.stringify(problem.tests,null,2);el('problemHiddenTests').value='';
+    el('problemModeHelp').textContent=custom?'Create your own challenge. Public tests appear to candidates; hidden tests count only during final submission.':'Select a question, then edit its statement, tests, starter code and assessment settings.';el('problemSubmit').textContent=custom?'Assign custom problem':'Assign coding problem';renderProblemPreview();
   }
-  function problemDraft() {
-    let tests = [];
-    try { tests = JSON.parse(el('problemTests').value); } catch {}
-    return {title:el('problemTitle').value.trim(), statement:el('problemStatement').value.trim(),
-      constraints:el('problemConstraints').value.trim(), starter:el('problemStarter').value,
-      tests:Array.isArray(tests) ? tests : []};
-  }
+  function problemDraft() {let tests=[],hiddenTests=[];try{tests=JSON.parse(el('problemTests').value);}catch{}try{hiddenTests=JSON.parse(el('problemHiddenTests').value||'[]');}catch{}return {title:el('problemTitle').value.trim(),topic:el('problemTopic').value.trim(),difficulty:el('problemDifficulty').value,statement:el('problemStatement').value.trim(),constraints:el('problemConstraints').value.trim(),starter:el('problemStarter').value,tests:Array.isArray(tests)?tests:[],hidden_tests:Array.isArray(hiddenTests)?hiddenTests:[]};}
   function syncProblemForm(problem) {
-    const signature = JSON.stringify(problem);
-    if (signature === syncedProblemState) return;
-    syncedProblemState = signature;
-    const preset = Object.entries(PROBLEM_BANK).find(([, item]) => JSON.stringify(item) === JSON.stringify(problem));
-    el('problemBank').value = preset ? preset[0] : 'custom';
-    updateProblemForm();
-    if (!preset) {
-      el('problemTitle').value = problem.title || '';
-      el('problemStatement').value = problem.statement || '';
-      el('problemConstraints').value = problem.constraints || '';
-      el('problemStarter').value = problem.starter || '';
-      el('problemTests').value = JSON.stringify(problem.tests || [], null, 2);
-      el('problemHiddenTests').value = JSON.stringify(problem.hidden_tests || [], null, 2);
-      el('problemModeHelp').textContent = 'This problem is assigned. Edit it here and send it again to replace it before the candidate submits.';
-    }
-    el('problemSubmit').textContent = 'Update coding problem';
+    const signature=JSON.stringify(problem);if(signature===syncedProblemState)return;syncedProblemState=signature;el('problemBank').value='custom';updateProblemForm();
+    for(const [id,key] of [['problemTitle','title'],['problemTopic','topic'],['problemDifficulty','difficulty'],['problemStatement','statement'],['problemConstraints','constraints'],['problemStarter','starter']])el(id).value=problem[key]||'';
+    el('problemTests').value=JSON.stringify(problem.tests||[],null,2);el('problemHiddenTests').value=JSON.stringify(problem.hidden_tests||[],null,2);el('problemTimeLimit').value=Math.max(1,Math.round((problem.time_limit_seconds||1800)/60));el('problemAiFeedback').checked=problem.ai_feedback_enabled!==false;el('problemDefaultLanguage').value=problem.default_language||'python';
+    el('peerRoom').querySelectorAll('[name=allowedLanguage]').forEach(input=>input.checked=(problem.allowed_languages||['python']).includes(input.value));if(problem.deadline_at){const date=new Date(problem.deadline_at*1000);el('problemDeadline').value=new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);}else el('problemDeadline').value='';el('problemModeHelp').textContent='Assigned challenge settings. Edit and update before the candidate submits.';el('problemSubmit').textContent='Update coding problem';
   }
-  function renderProblemPreview() {
-    if (!room || room.role !== 'interviewer' || (room.problem && !problemDraftActive)) return;
-    const draft = problemDraft();
-    el('sharedProblemTitle').textContent = draft.title || (el('problemBank').value === 'custom' ? 'Custom problem draft' : 'Problem preview');
-    el('sharedProblemStatement').textContent = `${draft.statement || 'Add a problem statement in the form to preview it.'}${draft.constraints ? `\nConstraints: ${draft.constraints}` : ''}`;
-    el('sharedProblemTests').textContent = draft.tests.length ? JSON.stringify(draft.tests, null, 2) : 'Add valid JSON test cases to preview them.';
-    el('editorHint').textContent = 'Preview only. Click Assign coding problem to send this challenge to the candidate.';
-  }
+  function renderExamples(target,tests) {target.replaceChildren();if(!tests?.length){line(target,'No public examples have been added yet.');return;}tests.forEach((test,index)=>{const item=document.createElement('article');item.className='problem-example';line(item,'Example '+(index+1),'strong');line(item,'Input\n'+(test.input??''),'pre');line(item,'Output\n'+(test.expected??''),'pre');target.append(item);});}
+  function renderProblemPreview() {if(!room||room.role!=='interviewer'||room.problem&&!problemDraftActive)return;const draft=problemDraft();el('sharedProblemTitle').textContent=draft.title||'Problem preview';el('sharedProblemMeta').textContent=(draft.topic||'Topic')+' Â· '+(draft.difficulty||'medium').toUpperCase();el('sharedProblemStatement').textContent=draft.statement||'Add a problem statement in the form to preview it.';el('sharedProblemConstraints').textContent=draft.constraints||'No constraints provided.';renderExamples(el('sharedProblemTests'),draft.tests);el('editorHint').textContent='Preview only. Assign the problem to share it with the candidate.';}
   async function show() {
     if (!mounted) {
       if (!mounting) mounting = (async () => {
-      const markup = await fetch('/assets/peer.html?v=3.4.2').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
+      const markup = await fetch('/assets/peer.html?v=3.5.0').then(r => { if (!r.ok) throw new Error('Workspace could not load. Refresh to try again.'); return r.text(); });
       const wrapper = document.createElement('div'); wrapper.id = 'peerWorkspace'; wrapper.innerHTML = markup;
       const solo = document.createElement('section'); solo.className = 'solo-studio'; solo.id='soloStudio';
       while (el('workspace').firstChild) solo.append(el('workspace').firstChild);
@@ -157,6 +130,7 @@ window.Peer = (() => {
   }
   function tab(name) {
     roomTab=name;
+    el('roomOverview').classList.toggle('hidden',name!=='live');
     el('peerRoom').querySelectorAll('[data-room-panel]').forEach(panel=>{
       const roleAllowed=!panel.classList.contains('interviewer-only') || room?.role==='interviewer';
       const candidateAllowed=!panel.classList.contains('candidate-only') || room?.role==='candidate';
@@ -172,8 +146,8 @@ window.Peer = (() => {
     el('peerRoom').querySelectorAll('#sendQuestion button, #problemForm button, #peerChatForm button').forEach(button=>button.disabled=!active);
     const submitted=room.events?.some(event=>event.kind==='submission');
     el('problemSubmit').disabled = !active || !!submitted;
-    el('runCode').disabled=el('submitCode').disabled=!active || !candidate || !room.problem || submitted;
-    el('peerCode').readOnly=!candidate || !active || !!submitted;
+    const assessmentExpired=!!room.problem?.assessment_deadline_at&&Number(room.problem_remaining_seconds||0)<=0;el('runCode').disabled=el('submitCode').disabled=!active||!candidate||!room.problem||submitted||assessmentExpired;
+    el('peerCode').readOnly=!candidate||!active||!!submitted||assessmentExpired;
     el('enableMedia').disabled=ended;
     el('callPeer').disabled=ended || !room.candidate_joined || socket?.readyState!==WebSocket.OPEN;
     const callState = pc?.connectionState;
@@ -312,7 +286,7 @@ window.Peer = (() => {
     el('localInitial').textContent = (names.local || '?').trim().charAt(0).toUpperCase();
     el('remoteInitial').textContent = (names.remote || '?').trim().charAt(0).toUpperCase();
     el('remoteCameraStatus').textContent = names.remote ? 'Camera is off' : 'Waiting for your peer to connect';
-    const statusText=room.status==='waiting' ? (room.candidate_joined?'Candidate joined — ready to start':'Waiting for a candidate') : room.status==='active'?'Interview in progress':'Interview completed';
+    const statusText=room.status==='waiting' ? (room.candidate_joined?'Candidate joined â€” ready to start':'Waiting for a candidate') : room.status==='active'?'Interview in progress':'Interview completed';
     el('peerIdentity').textContent=`You are the ${room.role}. ${statusText}.`;
     el('peerRoomCode').textContent=`Room code: ${room.id}`;
     el('timerLabel').textContent=room.status==='active'?'Time remaining':room.status==='completed'?'Session ended':'Session duration';
@@ -327,19 +301,15 @@ window.Peer = (() => {
     el('peerEnd').classList.toggle('hidden', !interviewer || room.status === 'completed');
     el('documentKind').querySelector('[value=resume]').disabled = interviewer;
     if (interviewer) el('documentKind').value = 'resource';
-    const language = room.problem?.language || el('languageSelect').value || 'python';
-    setLanguage(language, false);
-    el('languageSelect').disabled = interviewer || room.status !== 'active';
-    el('peerCode').readOnly = interviewer || room.status !== 'active';
-    if (document.activeElement !== el('peerCode') || interviewer) el('peerCode').value = room.code;
-    updateEditorLineNumbers();
-    const previewing = interviewer && (!room.problem || problemDraftActive);
-    const problem = previewing ? problemDraft() : room.problem;
-    el('sharedProblemTitle').textContent = problem?.title || (previewing ? (el('problemBank').value === 'custom' ? 'Custom problem draft' : 'Problem preview') : 'Waiting for a problem');
-    el('sharedProblemStatement').textContent = problem ? `${problem.statement || 'Add a problem statement in the form to preview it.'}${problem.constraints ? `\nConstraints: ${problem.constraints}` : ''}` : '';
-    el('sharedProblemTests').textContent = problem ? (problem.tests?.length ? JSON.stringify(problem.tests, null, 2) : 'Add valid JSON test cases to preview them.') : '';
+    const enabledLanguages=room.problem?.allowed_languages||['python','javascript','c','cpp'];const language=enabledLanguages.includes(room.problem?.language)?room.problem.language:enabledLanguages.includes(room.problem?.default_language)?room.problem.default_language:enabledLanguages[0]||'python';setLanguage(language,false);
+    for(const option of el('languageSelect').options)option.disabled=!enabledLanguages.includes(option.value);
+    el('languageSelect').disabled=interviewer||room.status!=='active';el('peerCode').readOnly=interviewer||room.status!=='active';if(document.activeElement!==el('peerCode')||interviewer)el('peerCode').value=room.code;updateEditorLineNumbers();
+    const previewing=interviewer&&(!room.problem||problemDraftActive);const problem=previewing?problemDraft():room.problem;
+    el('sharedProblemTitle').textContent=problem?.title||(previewing?'Problem preview':'Waiting for a problem');el('sharedProblemMeta').textContent=problem?(problem.topic||'Algorithms')+' Â· '+(problem.difficulty||'medium').toUpperCase():'';
+    el('sharedProblemStatement').textContent=problem?.statement||'';el('sharedProblemConstraints').textContent=problem?.constraints||'No constraints provided.';renderExamples(el('sharedProblemTests'),problem?.tests||[]);
+    el('assessmentTimer').textContent=room.problem?.assessment_deadline_at?formatDuration(room.problem_remaining_seconds):'--:--';el('assessmentTimer').classList.toggle('low',room.problem_remaining_seconds>0&&room.problem_remaining_seconds<=60);
     el('editorHint').textContent=interviewer
-      ? (previewing ? 'This is a live preview. Click Assign coding problem to send this challenge to the candidate.' : 'You are the interviewer: this is the candidate’s read-only code. The assigned problem is shown above.')
+      ? (previewing ? 'This is a live preview. Click Assign coding problem to send this challenge to the candidate.' : 'You are the interviewer: this is the candidateâ€™s read-only code. The assigned problem is shown above.')
       : room.status!=='active'?`Your ${languageLabel(language)} editor is here. It unlocks when the interviewer starts the session.`:!problem?'You can write code now. Run and Submit unlock after the interviewer assigns a problem.':'Write your solution below, run the tests, then submit your final answer.';
     const chat = el('peerChat'); chat.replaceChildren();
     const participantNames = new Map([
@@ -360,12 +330,14 @@ window.Peer = (() => {
     el('peerMessage').placeholder = chatAvailable ? 'Type a message' : 'Messaging is available after the interviewer starts the session';
     el('peerChatForm').querySelector('button[type="submit"]').disabled = !chatAvailable;
     const executions = room.events.filter(e => ['execution', 'submission'].includes(e.kind));
-    if (executions.length) renderExecutionResults(executions.at(-1).payload);
+    if(executions.length)renderExecutionResults(executions.at(-1).payload);
+    const submissions=room.events.filter(event=>['execution','submission'].includes(event.kind));const historyTarget=el('submissionHistory');historyTarget.replaceChildren();if(!submissions.length)line(historyTarget,'No submissions yet.');for(const [index,event] of submissions.slice().reverse().entries()){const payload=event.payload;line(historyTarget,`Attempt ${payload.attempt||submissions.length-index} Â· ${event.kind==='submission'?'Final submission':'Run'} Â· ${payload.verdict||'Executed'} Â· ${payload.score??payload.passed}/${payload.max_score??payload.total} points`,'div');}
+    const reviewEvent=room.events.filter(event=>event.kind==='code_review').at(-1);el('aiReviewSection').classList.toggle('hidden',!room.problem?.ai_feedback_enabled||!submissions.some(event=>event.kind==='submission'));el('codeReview').replaceChildren();if(reviewEvent)renderCodeReview(reviewEvent.payload);
     const docs = el('peerDocuments'); docs.replaceChildren();
     const selected = el('ragDocument').value; el('ragDocument').replaceChildren();
     for (const doc of room.documents) {
       const row = document.createElement('div'); row.className = 'document-row';
-      line(row, `${doc.filename} · ${doc.kind}`);
+      line(row, `${doc.filename} Â· ${doc.kind}`);
       const isImage = /\.(png|jpe?g|gif|webp)$/i.test(doc.filename);
       if (isImage) {
         const preview = line(row, 'Preview image', 'button'); preview.className = 'link';
@@ -410,6 +382,7 @@ window.Peer = (() => {
     const button = line(target, 'Use this question for review', 'button'); button.className = 'secondary';
     button.onclick = () => { tab('live'); el('peerQuestion').value = draft.question; el('peerQuestion').focus(); };
   }
+  function renderCodeReview(review) {const target=el('codeReview');target.replaceChildren();if(!review)return;line(target,review.summary||'Review completed.');line(target,'Time complexity: '+(review.time_complexity||'Not estimated'));line(target,'Space complexity: '+(review.space_complexity||'Not estimated'));if(review.strengths?.length){line(target,'What worked well','strong');review.strengths.forEach(item=>line(target,item,'p'));}if(review.improvements?.length){line(target,'Next improvements','strong');review.improvements.forEach(item=>line(target,item,'p'));}}
   function renderReport(report) {
     if (!room || room.id !== report.room_id) return;
     const target = el('peerReport'); target.replaceChildren(); target.classList.remove('hidden');
@@ -422,7 +395,7 @@ window.Peer = (() => {
     const intro = document.createElement('div'); intro.className = 'report-heading';
     const titleGroup = document.createElement('div'); line(titleGroup, 'INTERVIEW SUMMARY', 'span').className = 'eyebrow';
     line(titleGroup, 'Feedback & report', 'h2');
-    line(titleGroup, `${report.topic} · ${formatDuration(report.duration_seconds)}`, 'p').className = 'report-subtitle';
+    line(titleGroup, `${report.topic} Â· ${formatDuration(report.duration_seconds)}`, 'p').className = 'report-subtitle';
     intro.append(titleGroup); target.append(intro);
 
     const overview = document.createElement('section'); overview.className = `report-overview${availableCount ? '' : ' is-pending'}`;
@@ -480,17 +453,20 @@ window.Peer = (() => {
       line(coding, `${report.coding.passed} of ${report.coding.total} tests passed`, 'strong');
       for (const [index, test] of (report.coding.tests || []).entries()) {
         const row = document.createElement('div'); row.className = `report-test${test.passed ? ' is-passed' : ' is-failed'}`;
-        line(row, `Test Case: ${index + 1} · ${test.passed ? 'Passed' : 'Failed'}`, 'strong');
+        line(row, `Test Case: ${index + 1} Â· ${test.passed ? 'Passed' : 'Failed'}`, 'strong');
         if (test.output) line(row, `Output: ${test.output}`, 'p');
         if (test.error) line(row, `Error: ${test.error}`, 'p');
         coding.append(row);
       }
       if (report.coding.source) {
         const source = document.createElement('details'); source.className = 'report-source';
-        line(source, 'View submitted Python source', 'summary');
+        line(source, 'View submitted '+languageLabel(report.coding.language||'python')+' source', 'summary');
         line(source, report.coding.source, 'pre'); coding.append(source);
       }
     }
+
+    if(report.submission_history?.length){const history=section(target,'Coding attempts');const list=document.createElement('div');list.className='submission-history-list';for(const item of report.submission_history){line(list,'Attempt '+(item.attempt||'—')+' · '+(item.kind==='submission'?'Final submission':'Run')+' · '+(item.status||'Executed')+' · '+(item.passed??0)+'/'+(item.total??0)+' public tests · Score '+(item.score??0)+'/'+(item.max_score??0),'p');}history.append(list);}
+    if(report.code_review){const review=section(target,'AI code feedback');line(review,report.code_review.summary||'Review completed.','p');line(review,'Estimated time complexity: '+(report.code_review.time_complexity||'Not estimated'),'p');line(review,'Estimated space complexity: '+(report.code_review.space_complexity||'Not estimated'),'p');for(const [title,items] of [['Strengths',report.code_review.strengths],['Suggested improvements',report.code_review.improvements]])if(items?.length){line(review,title,'h4');const list=document.createElement('ul');for(const item of items)line(list,item,'li');review.append(list);}}
 
     if (report.communication) {
       const speech = section(target, 'Speaking practice');
@@ -507,7 +483,7 @@ window.Peer = (() => {
     if (report.resume) {
       const resume = section(target, 'Resume review');
       const checks = document.createElement('ul'); checks.className = 'report-check-list';
-      for (const [name, passed] of Object.entries(report.resume.checks || {})) line(checks, `${passed ? '✓' : '•'} ${name.replaceAll('_', ' ')}`, 'li');
+      for (const [name, passed] of Object.entries(report.resume.checks || {})) line(checks, `${passed ? 'âœ“' : 'â€¢'} ${name.replaceAll('_', ' ')}`, 'li');
       resume.append(checks);
       if (report.resume.matched_terms?.length) line(resume, `Relevant skills found: ${report.resume.matched_terms.join(', ')}`, 'p');
       if (report.resume.missing_terms?.length) line(resume, `Skills to add or demonstrate: ${report.resume.missing_terms.join(', ')}`, 'p');
@@ -577,7 +553,7 @@ window.Peer = (() => {
         const seconds = message.remaining_seconds;
         if(message.status==='active')el('peerTimer').textContent=formatDuration(seconds);
         el('peerTimer').classList.toggle('low', message.status === 'active' && seconds <= 60);
-        if (room.status !== message.status) await refresh();
+        controls();if(room.status!==message.status)await refresh();
       } else if (message.type === 'code' && room.role === 'interviewer') {
         el('peerCode').value = message.source;
         updateEditorLineNumbers();
@@ -708,8 +684,8 @@ window.Peer = (() => {
   async function uploadAudio(file) {
     if (!el('audioConsent').checked) throw new Error('Consent is required before audio analysis.');
     const data = new FormData(); data.append('consent', 'true'); data.append('file', file);
-    el('audioStatus').textContent = 'Transcribing locally…';
-    try { const result = await api(`/rooms/${room.id}/communication`, {method:'POST', body:data}); el('audioStatus').textContent = `Communication ${result.score}/100 · ${result.words_per_minute} words/min · ${result.filler_count} fillers. ${result.notice}`; }
+    el('audioStatus').textContent = 'Transcribing locallyâ€¦';
+    try { const result = await api(`/rooms/${room.id}/communication`, {method:'POST', body:data}); el('audioStatus').textContent = `Communication ${result.score}/100 Â· ${result.words_per_minute} words/min Â· ${result.filler_count} fillers. ${result.notice}`; }
     catch (e) { el('audioStatus').textContent = e.message; throw e; }
   }
   function bind() {
@@ -736,27 +712,22 @@ window.Peer = (() => {
     el('peerEnd').onclick = action(async () => { await request('/end'); await refresh(); });
     el('leaveRoom').onclick = () => close();
     el('sendQuestion').onsubmit = action(async () => { await request('/questions', {text:el('peerQuestion').value}); el('peerQuestion').value = ''; await refresh(); });
-    el('problemForm').onsubmit = action(async () => {
-      let tests;
-      let hiddenTests = [];
-      try { tests = JSON.parse(el('problemTests').value); }
-      catch { throw new Error('Tests must be valid JSON: use an array of objects with input and expected strings.'); }
-      try { hiddenTests = el('problemHiddenTests').value.trim() ? JSON.parse(el('problemHiddenTests').value) : []; }
-      catch { throw new Error('Hidden tests must be valid JSON.'); }
-      if (!Array.isArray(tests) || tests.length < 1 || tests.length > 5 || tests.some(test => !test || typeof test.input !== 'string' || typeof test.expected !== 'string'))
-        throw new Error('Add between 1 and 5 test cases. Each needs string fields named input and expected.');
-      if (!Array.isArray(hiddenTests) || hiddenTests.length > 50 || hiddenTests.some(test => !test || typeof test.input !== 'string' || typeof test.expected !== 'string'))
-        throw new Error('Hidden tests must be an array of objects with string input and expected fields.');
-      await request('/problem', {title:el('problemTitle').value, statement:el('problemStatement').value, constraints:el('problemConstraints').value, starter:el('problemStarter').value, tests, hidden_tests:hiddenTests});
-      problemDraftActive = false;
-      await refresh();
+    el('problemForm').onsubmit=action(async()=>{
+      let tests,hiddenTests=[];try{tests=JSON.parse(el('problemTests').value);}catch{throw new Error('Public test cases must be valid JSON.');}try{hiddenTests=el('problemHiddenTests').value.trim()?JSON.parse(el('problemHiddenTests').value):[];}catch{throw new Error('Hidden test cases must be valid JSON.');}
+      const valid=list=>Array.isArray(list)&&list.every(test=>test&&typeof test.input==='string'&&typeof test.expected==='string'&&(test.points===undefined||(Number.isFinite(Number(test.points))&&Number(test.points)>=0)));
+      if(!valid(tests)||tests.length<1||tests.length>5)throw new Error('Add 1â€“5 public test cases with input and expected strings.');if(!valid(hiddenTests)||hiddenTests.length>50)throw new Error('Add no more than 50 valid hidden test cases.');
+      const allowed_languages=[...el('problemForm').querySelectorAll('[name=allowedLanguage]:checked')].map(input=>input.value);if(!allowed_languages.length)throw new Error('Select at least one allowed language.');const default_language=el('problemDefaultLanguage').value;if(!allowed_languages.includes(default_language))throw new Error('The default language must also be enabled.');
+      const deadlineValue=el('problemDeadline').value,deadline_at=deadlineValue?new Date(deadlineValue).getTime()/1000:null;const points=[...tests,...hiddenTests].reduce((sum,test)=>sum+Number(test.points??1),0);if(points<=0)throw new Error('At least one test case must award points.');
+      await request('/problem',{...problemDraft(),tests:tests.map(test=>({...test,points:Number(test.points??1)})),hidden_tests:hiddenTests.map(test=>({...test,points:Number(test.points??1)})),time_limit_seconds:Number(el('problemTimeLimit').value)*60,deadline_at,allowed_languages,default_language,ai_feedback_enabled:el('problemAiFeedback').checked});problemDraftActive=false;await refresh();
     });
-    ['problemTitle','problemStatement','problemConstraints','problemStarter','problemTests','problemHiddenTests'].forEach(id => el(id).addEventListener('input', () => { problemDraftActive = true; renderProblemPreview(); }));
+    el('generateProblem').onclick=action(async()=>{const language=el('problemDefaultLanguage').value;const generated=await request('/generate-problem',{topic:el('problemTopic').value||'Algorithms',difficulty:el('problemDifficulty').value,language});el('problemBank').value='custom';for(const [id,key] of [['problemTitle','title'],['problemTopic','topic'],['problemDifficulty','difficulty'],['problemStatement','statement'],['problemConstraints','constraints'],['problemStarter','starter']])el(id).value=generated[key]||'';el('problemTests').value=JSON.stringify(generated.tests||[],null,2);el('problemHiddenTests').value=JSON.stringify(generated.hidden_tests||[],null,2);problemDraftActive=true;renderProblemPreview();toast('AI draft generated. Review and edit it before assignment.');});
+    ['problemTitle','problemTopic','problemDifficulty','problemStatement','problemConstraints','problemStarter','problemTests','problemHiddenTests'].forEach(id=>el(id).addEventListener('input',()=>{problemDraftActive=true;renderProblemPreview();}));
+    el('requestCodeReview').onclick=action(async()=>{el('codeReview').textContent='Reviewing the submitted solutionâ€¦';const review=await request('/code-review');renderCodeReview(review);});
     el('languageSelect').onchange = () => { setLanguage(el('languageSelect').value, true); };
     updateEditorLineNumbers();
-    el('peerCode').oninput = () => { updateEditorLineNumbers(); clearTimeout(codeDebounce); codeDebounce = setTimeout(() => { try { send({type:'code',source:el('peerCode').value,language:el('languageSelect').value}); } catch(e) { toast(e.message,true); } }, 400); };
-    el('peerCode').onscroll = updateEditorLineNumbers;
-    for (const [id, final] of [['runCode',false],['submitCode',true]]) el(id).onclick = action(async () => { el('codeResults').textContent = 'Running in the local sandbox…'; try { const result = await request('/execute', {source:el('peerCode').value,language:el('languageSelect').value,final}); renderExecutionResults(result); await refresh(); } catch(e) { el('codeResults').textContent = e.message; throw e; } });
+    el('peerCode').oninput=()=>{updateEditorLineNumbers();el('codeSaveStatus').textContent='Savingâ€¦';clearTimeout(codeDebounce);codeDebounce=setTimeout(()=>{try{send({type:'code',source:el('peerCode').value,language:el('languageSelect').value});el('codeSaveStatus').textContent='Autosaved to room';}catch(error){el('codeSaveStatus').textContent='Waiting to reconnect';toast(error.message,true);}},400);};
+    el('peerCode').onscroll=()=>{updateEditorLineNumbers();const layer=el('peerCodeHighlight');layer.scrollTop=el('peerCode').scrollTop;layer.scrollLeft=el('peerCode').scrollLeft;};
+    for (const [id, final] of [['runCode',false],['submitCode',true]]) el(id).onclick = action(async () => { el('codeResults').textContent = 'Running in the local sandboxâ€¦'; try { const result = await request('/execute', {source:el('peerCode').value,language:el('languageSelect').value,final}); renderExecutionResults(result); await refresh(); } catch(e) { el('codeResults').textContent = e.message; throw e; } });
     el('peerChatForm').onsubmit = action(async () => { send({type:'chat',text:el('peerMessage').value}); el('peerMessage').value = ''; });
     el('peerPdf').onchange = () => {
       const isImage = /\.(png|jpe?g|gif|webp)$/i.test(el('peerPdf').files[0]?.name || '');
@@ -772,7 +743,7 @@ window.Peer = (() => {
       if(!stream?.getTracks().length)await media();
       if(pc && ['failed','closed'].includes(pc.connectionState)){pc.close();pc=null;}
       makePC();
-      el('mediaStatus').textContent='Connecting to your peer…';
+      el('mediaStatus').textContent='Connecting to your peerâ€¦';
     });
     el('toggleMic').onclick=action(()=>devices.toggle('audio'));
     el('toggleCamera').onclick=action(()=>devices.toggle('video'));

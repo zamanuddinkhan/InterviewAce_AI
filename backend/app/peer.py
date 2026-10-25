@@ -48,14 +48,27 @@ class TextBody(BaseModel):
 class TestCase(BaseModel):
     input: str = Field(default='', max_length=5000)
     expected: str = Field(max_length=5000)
+    points: float = Field(default=1, ge=0, le=1000)
 
 class ProblemBody(BaseModel):
     title: str = Field(min_length=2, max_length=200)
+    topic: str = Field(default='Algorithms', min_length=2, max_length=100)
+    difficulty: str = Field(default='medium', pattern='^(easy|medium|hard)$')
     statement: str = Field(min_length=5, max_length=10000)
     constraints: str = Field(default='', max_length=2000)
     starter: str = Field(default='', max_length=10000)
     tests: list[TestCase] = Field(min_length=1, max_length=5)
     hidden_tests: list[TestCase] = Field(default_factory=list, max_length=50)
+    time_limit_seconds: int = Field(default=1800, ge=60, le=14400)
+    deadline_at: float | None = Field(default=None, ge=0)
+    allowed_languages: list[str] = Field(default_factory=lambda: ['python','javascript','c','cpp'], min_length=1, max_length=4)
+    default_language: str = Field(default='python', pattern='^(python|javascript|c|cpp)$')
+    ai_feedback_enabled: bool = True
+
+class CodingGenerateBody(BaseModel):
+    topic: str = Field(min_length=2, max_length=100)
+    difficulty: str = Field(default='medium', pattern='^(easy|medium|hard)$')
+    language: str = Field(default='python', pattern='^(python|javascript|c|cpp)$')
 
 class CodeBody(BaseModel):
     source: str = Field(min_length=1, max_length=20000)
@@ -114,12 +127,14 @@ def snapshot(db, room, user):
     interviewer = db.get(User, room.interviewer_id)
     candidate = db.get(User, room.candidate_id) if room.candidate_id is not None else None
     problem = room.problem
+    problem_remaining = max(0, math.ceil(problem.get('assessment_deadline_at', 0) - time.time())) if problem and problem.get('assessment_deadline_at') else 0
     if problem and user.id != room.interviewer_id:
         problem = {key: value for key, value in problem.items() if key != 'hidden_tests'}
     return {'id': room.id, 'topic': room.topic, 'status': room.status,
             'interviewer_id': room.interviewer_id, 'candidate_id': room.candidate_id,
             'duration_seconds': room.duration_seconds, 'started_at': room.started_at,
             'ended_at': room.ended_at, 'remaining_seconds': remaining,
+            'problem_remaining_seconds': problem_remaining,
             'candidate_joined': room.candidate_id is not None,
             'role': 'interviewer' if room.interviewer_id == user.id else 'candidate',
             'interviewer_name': participant_name(interviewer, 'Interviewer'),
@@ -244,6 +259,16 @@ def details(room_id: str, user: User = Depends(current_user), db: Session = Depe
         payload = row.payload
         if row.kind == 'problem' and user.id != room.interviewer_id:
             payload = {key: value for key, value in payload.items() if key != 'hidden_tests'}
+        if row.kind in ('execution', 'submission') and user.id != room.interviewer_id:
+            payload = dict(payload)
+            visible_count = len((room.problem or {}).get('tests', []))
+            public_results = (payload.get('tests') or [])[:visible_count]
+            payload['tests'] = public_results
+            payload['passed'] = sum(bool(test.get('passed')) for test in public_results)
+            payload['total'] = visible_count
+            payload['visible_passed'] = payload['passed']
+            payload['visible_total'] = visible_count
+            payload['hidden_evaluated'] = row.kind == 'submission' and len((row.payload.get('tests') or [])) > visible_count
         events.append({'kind': row.kind, 'user_id': row.user_id,
                        'user_name': event_users.get(row.user_id, 'Participant'), 'payload': payload})
     data['events'] = events
@@ -285,11 +310,45 @@ async def problem(room_id: str, body: ProblemBody, user: User = Depends(current_
     room = access(db, room_id, user, 'interviewer', active=True)
     if db.scalar(select(RoomEvent).where(RoomEvent.room_id == room_id, RoomEvent.kind == 'submission')):
         raise HTTPException(409, 'A final solution is already submitted; keep its problem unchanged.')
-    room.problem = body.model_dump(); room.code = body.starter
+    supported = {'python','javascript','c','cpp'}
+    if not set(body.allowed_languages) <= supported or len(set(body.allowed_languages)) != len(body.allowed_languages):
+        raise HTTPException(422, 'Choose one or more supported programming languages.')
+    if body.default_language not in body.allowed_languages:
+        raise HTTPException(422, 'The default language must be in the allowed language list.')
+    if sum(test.points for test in [*body.tests, *body.hidden_tests]) <= 0:
+        raise HTTPException(422, 'Test cases must award at least one point in total.')
+    now = time.time()
+    if body.deadline_at is not None and body.deadline_at <= now:
+        raise HTTPException(422, 'The assessment deadline must be in the future.')
+    room.problem = body.model_dump()
+    room.problem.update({
+        'assigned_at': now,
+        'assessment_deadline_at': min(room.started_at + room.duration_seconds,
+                                      now + body.time_limit_seconds,
+                                      body.deadline_at if body.deadline_at is not None else float('inf')),
+        'public_test_count': len(body.tests),
+    })
+    room.code = body.starter
     db.commit()
-    event(db, room, user, 'problem', body.model_dump())
+    event(db, room, user, 'problem', room.problem)
     await broadcast(room_id, {'type': 'refresh'})
     return room.problem
+
+
+@router.post('/{room_id}/generate-problem')
+async def generate_coding_problem(room_id: str, body: CodingGenerateBody,
+                                  user: User = Depends(current_user), db: Session = Depends(get_db)):
+    access(db, room_id, user, 'interviewer', active=True)
+    if db.scalar(select(RoomEvent).where(RoomEvent.room_id == room_id, RoomEvent.kind == 'submission')):
+        raise HTTPException(409, 'A final solution was already submitted for this assessment.')
+    try:
+        generated = await run_in_threadpool(ai.generate_coding_problem, body.topic.strip(), body.difficulty, body.language)
+        problem = ProblemBody.model_validate(generated)
+    except Exception as exc:
+        raise HTTPException(503, str(exc)[:300] or 'Problem generation is unavailable. Write a problem manually.') from exc
+    result = problem.model_dump()
+    result['default_language'] = body.language
+    return result
 
 
 @router.post('/{room_id}/execute')
@@ -301,6 +360,10 @@ async def execute(room_id: str, body: CodeBody, user: User = Depends(current_use
             raise HTTPException(409, 'Wait for the interviewer to set a problem.')
         if body.final and db.scalar(select(RoomEvent).where(RoomEvent.room_id == room_id, RoomEvent.kind == 'submission')):
             raise HTTPException(409, 'Final solution already submitted.')
+        if body.language not in room.problem.get('allowed_languages', ['python','javascript','c','cpp']):
+            raise HTTPException(422, 'This language is not enabled for the assessment.')
+        if room.problem.get('assessment_deadline_at') and time.time() >= room.problem['assessment_deadline_at']:
+            raise HTTPException(409, 'The coding assessment deadline has passed.')
         assigned_problem = room.problem
         visible_tests = assigned_problem['tests']
         hidden_tests = assigned_problem.get('hidden_tests', [])
@@ -314,21 +377,65 @@ async def execute(room_id: str, body: CodeBody, user: User = Depends(current_use
             raise HTTPException(503, str(exc)) from exc
         # Recheck the authoritative deadline after the runner returns.
         db.refresh(room); access(db, room_id, user, 'candidate', active=True)
+        if room.problem.get('assessment_deadline_at') and time.time() >= room.problem['assessment_deadline_at']:
+            raise HTTPException(409, 'The coding assessment deadline passed while the code was running.')
         if room.problem != assigned_problem:
             raise HTTPException(409, 'The coding problem changed during execution. Run the current problem again.')
+        case_points = [case.get('points', 1) for case in tests]
+        visible_count = len(visible_tests)
+        for index, test_result in enumerate(result.get('tests', [])):
+            test_result['points'] = case_points[index] if index < len(case_points) else 1
+        result['score'] = round(sum(case_points[index] for index, test in enumerate(result.get('tests', [])) if test.get('passed')), 2)
+        result['max_score'] = round(sum(case_points), 2)
+        result['verdict'] = 'Accepted' if result['score'] >= result['max_score'] else 'Needs work'
+        result['attempt'] = db.scalar(select(RoomEvent).where(
+            RoomEvent.room_id == room_id, RoomEvent.kind.in_(('execution','submission'))
+        ).order_by(RoomEvent.id.desc()).limit(1))
+        result['attempt'] = (result['attempt'].payload.get('attempt', 0) + 1) if result['attempt'] else 1
         room.code = body.source
         room.problem = {**room.problem, 'language': body.language}
-        result.update({'source': body.source, 'final': body.final})
+        result.update({'source': body.source, 'final': body.final, 'language': body.language,
+                       'visible_total': visible_count,
+                       'visible_passed': sum(bool(test.get('passed')) for test in result.get('tests', [])[:visible_count])})
+        full_result = dict(result)
         if body.final and hidden_tests:
-            visible_count = len(visible_tests)
-            result['tests'] = [
-                ({key: value for key, value in case.items() if key not in ('input', 'expected')}
-                 if index >= visible_count else case)
-                for index, case in enumerate(result['tests'])
-            ]
-        event(db, room, user, 'submission' if body.final else 'execution', result)
+            result['tests'] = result['tests'][:visible_count]
+            result['hidden_evaluated'] = True
+            result['passed'] = result['visible_passed']
+            result['total'] = result['visible_total']
+        event(db, room, user, 'submission' if body.final else 'execution', full_result)
         await broadcast(room_id, {'type': 'refresh'})
         return result
+
+
+@router.post('/{room_id}/code-review')
+async def code_review(room_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    room = access(db, room_id, user, 'candidate')
+    if not room.problem or not room.problem.get('ai_feedback_enabled', True):
+        raise HTTPException(403, 'AI feedback is disabled for this assessment.')
+    submission = db.scalar(select(RoomEvent).where(
+        RoomEvent.room_id == room_id, RoomEvent.kind == 'submission'
+    ).order_by(RoomEvent.id.desc()))
+    if not submission:
+        raise HTTPException(409, 'Submit a solution before requesting AI feedback.')
+    cached = db.scalar(select(RoomEvent).where(
+        RoomEvent.room_id == room_id, RoomEvent.kind == 'code_review'
+    ).order_by(RoomEvent.id.desc()))
+    if cached and cached.payload.get('submission_id') == submission.id:
+        return cached.payload
+    payload = submission.payload
+    try:
+        review = await run_in_threadpool(
+            ai.review_code, room.problem, payload.get('source', ''),
+            payload.get('language', room.problem.get('default_language', 'python')),
+            {'passed': payload.get('passed', 0), 'total': payload.get('total', 0)},
+        )
+    except Exception as exc:
+        raise HTTPException(503, str(exc)[:300] or 'AI code feedback is unavailable. Try again later.') from exc
+    review['submission_id'] = submission.id
+    event(db, room, user, 'code_review', review)
+    await broadcast(room_id, {'type': 'refresh'})
+    return review
 
 
 @router.post('/{room_id}/documents', status_code=201)
@@ -559,18 +666,39 @@ def report(room_id: str, user: User = Depends(current_user), db: Session = Depen
     code = latest.get('submission')
     voice = latest.get('communication')
     feedback = latest.get('feedback')
-    scores = {'coding': 100 * code['passed'] / code['total'] if code else None,
+    scores = {'coding': 100 * code.get('score', code['passed']) / code.get('max_score', code['total']) if code and code.get('max_score', code.get('total', 0)) else None,
               'technical': (feedback['technical'] + feedback['problem_solving']) / 2 if feedback else None,
               'communication': voice['score'] if voice else None,
               'resume': resume['score'] if resume else None}
     weights = {'coding': .4, 'technical': .3, 'communication': .2, 'resume': .1}
     available = sum(weights[k] for k, v in scores.items() if v is not None)
     overall = round(sum(weights[k] * v for k, v in scores.items() if v is not None) / available, 1) if available else None
+    candidate = user.id != room.interviewer_id
+    safe_code = dict(code) if code else None
+    if safe_code and candidate:
+        visible_count = len((room.problem or {}).get('tests', []))
+        safe_code['tests'] = (safe_code.get('tests') or [])[:visible_count]
+        safe_code['passed'] = sum(bool(test.get('passed')) for test in safe_code['tests'])
+        safe_code['total'] = visible_count
+        safe_code['hidden_evaluated'] = len((code.get('tests') or [])) > visible_count
+    submission_history = []
+    for row in rows:
+        if row.kind in ('execution','submission'):
+            payload = row.payload
+            visible_count = len((room.problem or {}).get('tests', []))
+            submission_history.append({
+                'kind': row.kind, 'attempt': payload.get('attempt'), 'status': payload.get('verdict'),
+                'score': payload.get('score'), 'max_score': payload.get('max_score'),
+                'passed': (sum(bool(test.get('passed')) for test in payload.get('tests', [])[:visible_count])
+                           if candidate else payload.get('passed')),
+                'total': visible_count if candidate else payload.get('total'),
+            })
     return {'room_id': room.id, 'topic': room.topic, 'status': room.status,
             'duration_seconds': round(max(0, room.ended_at - room.started_at), 1) if room.started_at else 0,
             'scores': scores, 'overall_score': overall, 'weights': weights,
             'scoring_method': 'Coding 40%, interviewer technical/problem-solving 30%, speech metrics 20%, resume rules 10%. Available weights are renormalized; missing scores remain unavailable.',
-            'resume': resume, 'communication': voice, 'coding': code, 'interviewer_feedback': feedback,
+            'resume': resume, 'communication': voice, 'coding': safe_code, 'interviewer_feedback': feedback,
+            'code_review': latest.get('code_review'), 'submission_history': submission_history,
             'questions': [r.payload['text'] for r in rows if r.kind == 'question'],
             'improvement_plan': [feedback['improvements']] if feedback else ['Ask your interviewer for feedback.', 'Practise the topic and explain your solution with examples.'],
             'notice': 'Practice assessments only. Resume/speech scores are automated estimates; interviewer ratings are human feedback.'}
@@ -778,7 +906,9 @@ async def live(ws: WebSocket, room_id: str):
                 except HTTPException:
                     await ws.close(code=1008, reason='Session expired or access revoked.')
                     return
-                await ws.send_json({'type': 'timer', 'status': data['status'], 'remaining_seconds': data['remaining_seconds']})
+                await ws.send_json({'type': 'timer', 'status': data['status'],
+                                    'remaining_seconds': data['remaining_seconds'],
+                                    'problem_remaining_seconds': data['problem_remaining_seconds']})
                 await asyncio.sleep(1)
         ticker = asyncio.create_task(ticks())
         while True:
@@ -804,10 +934,12 @@ async def live(ws: WebSocket, room_id: str):
                         await broadcast(room_id, {'type': 'refresh'})
                 elif kind == 'code':
                     access(db, room_id, user, 'candidate', active=True)
-                    room.code = str(message.get('source', ''))[:20000]; db.commit()
                     language = str(message.get('language', 'python'))
                     if language not in ('python', 'javascript', 'c', 'cpp'):
                         raise HTTPException(422, 'Unsupported code language.')
+                    if room.problem and language not in room.problem.get('allowed_languages', ['python', 'javascript', 'c', 'cpp']):
+                        raise HTTPException(422, 'This language is not enabled for the assessment.')
+                    room.code = str(message.get('source', ''))[:20000]
                     room.problem = {**room.problem, 'language': language} if room.problem else room.problem
                     db.commit()
                     await broadcast_signal(room_id, user_id, {'type': 'code', 'source': room.code, 'language': language})
