@@ -17,7 +17,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
 from sqlalchemy import or_, select
@@ -55,6 +55,7 @@ class ProblemBody(BaseModel):
     constraints: str = Field(default='', max_length=2000)
     starter: str = Field(default='', max_length=10000)
     tests: list[TestCase] = Field(min_length=1, max_length=5)
+    hidden_tests: list[TestCase] = Field(default_factory=list, max_length=50)
 
 class CodeBody(BaseModel):
     source: str = Field(min_length=1, max_length=20000)
@@ -112,14 +113,18 @@ def snapshot(db, room, user):
     remaining = max(0, math.ceil(room.started_at + room.duration_seconds - time.time())) if room.status == 'active' else 0
     interviewer = db.get(User, room.interviewer_id)
     candidate = db.get(User, room.candidate_id) if room.candidate_id is not None else None
+    problem = room.problem
+    if problem and user.id != room.interviewer_id:
+        problem = {key: value for key, value in problem.items() if key != 'hidden_tests'}
     return {'id': room.id, 'topic': room.topic, 'status': room.status,
+            'interviewer_id': room.interviewer_id, 'candidate_id': room.candidate_id,
             'duration_seconds': room.duration_seconds, 'started_at': room.started_at,
             'ended_at': room.ended_at, 'remaining_seconds': remaining,
             'candidate_joined': room.candidate_id is not None,
             'role': 'interviewer' if room.interviewer_id == user.id else 'candidate',
             'interviewer_name': participant_name(interviewer, 'Interviewer'),
             'candidate_name': participant_name(candidate, 'Candidate') if candidate else None,
-            'code': room.code, 'problem': room.problem}
+            'code': room.code, 'problem': problem}
 
 
 def deletion_state(db: Session, room_ids: list[str]):
@@ -232,12 +237,16 @@ def details(room_id: str, user: User = Depends(current_user), db: Session = Depe
         )
         if participant is not None
     }
-    data['events'] = [
-        {'kind': r.kind, 'user_id': r.user_id, 'user_name': event_users.get(r.user_id, 'Participant'),
-         'payload': r.payload}
-        for r in rows
-        if r.kind != 'rag_draft' or user.id == room.interviewer_id
-    ]
+    events = []
+    for row in rows:
+        if row.kind == 'rag_draft' and user.id != room.interviewer_id:
+            continue
+        payload = row.payload
+        if row.kind == 'problem' and user.id != room.interviewer_id:
+            payload = {key: value for key, value in payload.items() if key != 'hidden_tests'}
+        events.append({'kind': row.kind, 'user_id': row.user_id,
+                       'user_name': event_users.get(row.user_id, 'Participant'), 'payload': payload})
+    data['events'] = events
     docs = db.scalars(select(Document).where(Document.room_id == room_id)).all()
     data['documents'] = [{'id': d.id, 'filename': d.filename, 'kind': d.kind, 'analysis': d.analysis,
                           'searchable': any(str(page.get('text', '')).strip() for page in d.pages)} for d in docs]
@@ -293,7 +302,9 @@ async def execute(room_id: str, body: CodeBody, user: User = Depends(current_use
         if body.final and db.scalar(select(RoomEvent).where(RoomEvent.room_id == room_id, RoomEvent.kind == 'submission')):
             raise HTTPException(409, 'Final solution already submitted.')
         assigned_problem = room.problem
-        tests = assigned_problem['tests']
+        visible_tests = assigned_problem['tests']
+        hidden_tests = assigned_problem.get('hidden_tests', [])
+        tests = visible_tests + hidden_tests if body.final else visible_tests
         try:
             if body.language == 'python':
                 result = await run_in_threadpool(runner.execute, body.source, tests)
@@ -308,6 +319,13 @@ async def execute(room_id: str, body: CodeBody, user: User = Depends(current_use
         room.code = body.source
         room.problem = {**room.problem, 'language': body.language}
         result.update({'source': body.source, 'final': body.final})
+        if body.final and hidden_tests:
+            visible_count = len(visible_tests)
+            result['tests'] = [
+                ({key: value for key, value in case.items() if key not in ('input', 'expected')}
+                 if index >= visible_count else case)
+                for index, case in enumerate(result['tests'])
+            ]
         event(db, room, user, 'submission' if body.final else 'execution', result)
         await broadcast(room_id, {'type': 'refresh'})
         return result
@@ -556,6 +574,95 @@ def report(room_id: str, user: User = Depends(current_user), db: Session = Depen
             'questions': [r.payload['text'] for r in rows if r.kind == 'question'],
             'improvement_plan': [feedback['improvements']] if feedback else ['Ask your interviewer for feedback.', 'Practise the topic and explain your solution with examples.'],
             'notice': 'Practice assessments only. Resume/speech scores are automated estimates; interviewer ratings are human feedback.'}
+
+
+def _pdf_text(value):
+    return str(value or '').replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)').encode('latin-1', 'replace').decode('latin-1')
+
+
+def _feedback_pdf(report_data):
+    lines = [
+        'InterviewAce Feedback Report',
+        f"Topic: {report_data['topic']}",
+        f"Duration: {report_data['duration_seconds']} seconds",
+        '',
+        f"Overall score: {report_data['overall_score'] if report_data['overall_score'] is not None else 'Pending'}",
+        'Score breakdown:',
+    ]
+    for key, value in report_data['scores'].items():
+        lines.append(f"  {key.replace('_', ' ').title()}: {value if value is not None else 'Not assessed'}")
+    feedback = report_data.get('interviewer_feedback')
+    if feedback:
+        lines.extend(['', 'Interviewer feedback:',
+                      f"  Technical knowledge: {feedback['technical']}",
+                      f"  Problem solving: {feedback['problem_solving']}",
+                      f"  Communication: {feedback['communication']}",
+                      f"  Strengths: {feedback['strengths']}",
+                      f"  Areas to improve: {feedback['improvements']}"])
+    coding = report_data.get('coding')
+    if coding:
+        lines.extend(['', f"Coding: {coding['passed']} of {coding['total']} tests passed"])
+        for index, test in enumerate(coding.get('tests', []), 1):
+            lines.append(f"  Test {index}: {'Passed' if test.get('passed') else 'Failed'}")
+            if test.get('error'):
+                lines.append(f"    Error: {test['error']}")
+    lines.extend(['', 'Suggested next steps:'])
+    lines.extend(f"  - {step}" for step in report_data.get('improvement_plan', []))
+    lines.extend(['', report_data.get('notice', '')])
+
+    wrapped = []
+    for line_text in lines:
+        text = str(line_text)
+        while len(text) > 92:
+            split_at = text.rfind(' ', 0, 92)
+            split_at = split_at if split_at > 0 else 92
+            wrapped.append(text[:split_at])
+            text = text[split_at:].lstrip()
+        wrapped.append(text)
+    pages = [wrapped[index:index + 48] for index in range(0, len(wrapped), 48)] or [[]]
+    objects = [None]
+    page_ids = []
+    content_ids = []
+    for page_lines in pages:
+        commands = ['BT', '/F1 11 Tf', '50 760 Td']
+        for index, line_text in enumerate(page_lines):
+            if index:
+                commands.append('0 -15 Td')
+            commands.append(f'({_pdf_text(line_text)}) Tj')
+        commands.append('ET')
+        stream = '\n'.join(commands).encode('latin-1')
+        content_ids.append(len(objects) + 1)
+        objects.append(f'<< /Length {len(stream)} >>\nstream\n'.encode() + stream + b'\nendstream')
+        page_ids.append(len(objects) + 1)
+        objects.append(None)
+    font_id = len(objects) + 1
+    objects.append(b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+    pages_id = len(objects) + 1
+    objects.append(None)
+    catalog_id = len(objects) + 1
+    objects.append(None)
+    for page_id, content_id in zip(page_ids, content_ids):
+        objects[page_id - 1] = f'<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>'.encode()
+    kids = ' '.join(f'{page_id} 0 R' for page_id in page_ids)
+    objects[pages_id - 1] = f'<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>'.encode()
+    objects[catalog_id - 1] = f'<< /Type /Catalog /Pages {pages_id} 0 R >>'.encode()
+    output = bytearray(b'%PDF-1.4\n%\xe2\xe3\xcf\xd3\n')
+    offsets = [0]
+    for object_id, value in enumerate(objects[1:], 1):
+        offsets.append(len(output))
+        output.extend(f'{object_id} 0 obj\n'.encode() + value + b'\nendobj\n')
+    xref = len(output)
+    output.extend(f'xref\n0 {len(objects)}\n0000000000 65535 f \n'.encode())
+    output.extend(b''.join(f'{offset:010d} 00000 n \n'.encode() for offset in offsets[1:]))
+    output.extend(f'trailer\n<< /Size {len(objects)} /Root {catalog_id} 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode())
+    return bytes(output)
+
+
+@router.get('/{room_id}/report.pdf')
+def report_pdf(room_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    data = report(room_id, user, db)
+    return Response(_feedback_pdf(data), media_type='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename="interviewace-feedback-{room_id}.pdf"'})
 
 
 @router.post('/{room_id}/undo-delete')

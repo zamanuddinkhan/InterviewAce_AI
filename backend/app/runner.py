@@ -45,15 +45,24 @@ def execute(source: str, tests: list[dict], language: str = 'python') -> dict:
                         subprocess.run(['docker', 'rm', '-f', name], capture_output=True, timeout=5)
                         process.kill()
                         process.wait(timeout=5)
-                        results.append({'passed': False, 'output': '', 'error': 'Execution timed out.'})
+                        results.append({'passed': False, 'status': 'timeout', 'output': '', 'error': 'Execution timed out.'})
                         continue
                     output.seek(0); errors.seek(0)
                     stdout = output.read(16000).decode(errors='replace')
                     stderr = errors.read(8000).decode(errors='replace')
                 if process.returncode == 125:
                     raise RuntimeError('Code sandbox unavailable. Build the runner image and start Docker.')
-                results.append({'passed': process.returncode == 0 and stdout.strip() == case['expected'].strip(),
-                                'output': stdout, 'error': stderr, 'expected': case['expected']})
+                passed = process.returncode == 0 and stdout.strip() == case['expected'].strip()
+                if passed:
+                    status = 'passed'
+                elif process.returncode == 0:
+                    status = 'wrong_answer'
+                elif language in ('c', 'cpp') and ('error:' in stderr.lower() or 'undefined reference' in stderr.lower()):
+                    status = 'compile_error'
+                else:
+                    status = 'runtime_error'
+                results.append({'passed': passed, 'status': status, 'output': stdout, 'error': stderr,
+                                'expected': case['expected']})
             except FileNotFoundError as exc:
                 raise RuntimeError('Docker is required for code execution; host execution is disabled.') from exc
     return {'tests': results, 'passed': sum(r['passed'] for r in results), 'total': len(results)}
